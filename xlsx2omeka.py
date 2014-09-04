@@ -32,7 +32,7 @@ def fetch_elements():
         thing_names[thing['name']] = thing['id']   
     return thing_names
 element_names = fetch_elements()
-
+print element_names
 #Find the names & ids of collections, not as easy as it sounds
 def fetch_collections():
     response, content = OmekaClient(endpoint, apikey).get('collections')
@@ -40,31 +40,32 @@ def fetch_collections():
     thing_names = {}
 
     for thing in things:
-       # if thing['element_texts']['element']['name'] == "Title":
         for t in thing['element_texts']:
             if t['element']['name'] == 'Title':
                 thing_names[t['text']] =  thing['id'] 
                 
-    
     return thing_names
 
-
 collection_names = fetch_collections()
-print collection_names
 
 
-die
+
 databook = tablib.import_book(args['inputfile'])
 
 data = yaml.load(databook.yaml)
 
 for d in data:
     collection =  d['title']
-    if len(d['data']) > 0:
-        #print d['data']
-        for key,value in d['data'][0].items():
-          if key in d:
-              print 'Uploading ' + key
+    print "Collection:", collection
+    if collection in collection_names:
+        for item in d['data']:
+          
+            for key,value in item.items():
+                if value <> None:
+                    if key in element_names:
+                        print 'Uploading ', key, value
+                    else:
+                        print 'warning ', key, value
               
 
             
