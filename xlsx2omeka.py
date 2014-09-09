@@ -4,6 +4,7 @@ import json
 import argparse
 from sys import stdin
 import sys
+import os
 from omekaclient import OmekaClient
 """ Uploads an entire spreadsheet to an Omeka server """
 
@@ -12,19 +13,18 @@ parser = argparse.ArgumentParser()
 parser.add_argument('inputfile', type=argparse.FileType('rb'),  default=stdin, help='Name of input Excel file')
 parser.add_argument('endpoint',  default=stdin, help='Omeka Server')
 parser.add_argument('keyfile',nargs="?", help='File name where you have stashed your Omeka key') #  type=argparse.FileType('rb'),
-#parser.add_argument('outputfile', type=argparse.FileType('rwb'),  default=stdin, help='Name of input Excel file')
-parser.add_argument('-p', '--public', action='store_true', help='Make item public')
-parser.add_argument('-f', '--featured', action='store_true', help='Make item featured')
-parser.add_argument('-c', '--collection', type=int, default=None, help='Add item to collection n')
-parser.add_argument('-t', '--type', type=int, default=1, help='Specify item type using Omeka id; default is 1, for "Document"')
-parser.add_argument('-u', '--upload', default=None, help='Name of file to upload and attach to item')
+parser.add_argument('-i', '--identifier', action='store_true',default="Identifier", help='Name of an Identifier column in the input spreadsheet. ')
+parser.add_argument('-p', '--public', action='store_true', help='Make items public')
+parser.add_argument('-f', '--featured', action='store_true', help='Make items featured')
+#parser.add_argument('-c', '--collection', type=int, default=None, help='Add item to collection n')
+#parser.add_argument('-t', '--type', type=int, default=1, help='Specify item type using Omeka id; default is 1, for "Document"')
+#parser.add_argument('-u', '--upload', default=None, help='Name of file to upload and attach to item')
 parser.add_argument('-m', '--mdmark', default="markdown>", help='Change string prefix that triggers markdown conversion; default is "markdown>"')
 args = vars(parser.parse_args())
-
+#TODO - fix reading API key from file
 apikey = args['keyfile']#.read()
 endpoint = args['endpoint']
-
-
+inputfile = args['inputfile']
 
 # TODO: make all these into proper classes so you can find out tha item set an item belongs to etc without having to
 # navigate the structure directly (lots of the stuff returned by the API is lists so we want convenient ways to find things in those lists)
@@ -70,10 +70,16 @@ def fetch_collections():
                 collection_names[t['text']] =  collection['id']
     return collections, collection_names
 
+#TODO make this a proper grown-up class
+
+identifier_column = args['identifier']
 def find_mapping(data):
+    
     collection_field_mapping = {}
+    supplied_id_to_omeka_id = {}
     for sheet in data:
         if sheet['title'] == 'Omeka Mapping':
+            supplied_element_names = sheet['data']
             for row in sheet['data']:
                 collection = row["Collection"]
                 set = row["Omeka Element Set"]
@@ -88,9 +94,13 @@ def find_mapping(data):
                 for key, value in row.items():
                     if value == None:
                         row[key] = ""
-            return collection_field_mapping, sheet['data']
-    else:
-        return {}, []       
+        elif sheet['title'] == 'ID Mapping':
+            for row in sheet['data']:
+                supplied_id_to_omeka_id[row[identifier_column]] = row["Omeka ID"]
+                
+
+    return collection_field_mapping, supplied_element_names, supplied_id_to_omeka_id
+          
 
 element_sets, element_set_names = fetch_element_sets()
 
@@ -98,36 +108,33 @@ element_sets, element_set_names = fetch_element_sets()
 default_element_set_names = ['Dublin Core','Item Type Metadata']
 
 elements, element_names = fetch_elements()
-
 record_type_names = fetch_item_types()
 collections, collection_names = fetch_collections()
-databook = tablib.import_book(args['inputfile'])
+
+#Get the main data
+databook = tablib.import_book(inputfile)
 data = yaml.load(databook.yaml)
-
-#TODO add a parameter here
-try:
-    previous_output = tablib.import_book(open("output.xlsx","rb"))
+#Get mapping data
+mapfile = inputfile.name + ".mapping.xlsx"
+if os.path.exists(mapfile):
+    previous_output = tablib.import_book(open(mapfile,"rb"))
     previous = yaml.load(previous_output.yaml)
-    previous_run = True
-except:
-   previous_run = False
+    
+    collection_field_mapping, supplied_element_names, id_to_omeka_id = find_mapping(previous)
+else:
+    collection_field_mapping = {}
+    id_to_omeka_id = {}
+    supplied_element_names = []
+print id_to_omeka_id
 
 
-collection_field_mapping = {}
+
+
 #TODO refactor so this can replace omekadd.py
 count = 0
 sheet = 0
 
-#Look for mapping data only in original spreadsheet
-collection_field_mapping, supplied_element_names = find_mapping(data)
-
-
-
-print supplied_element_names
-print collection_field_mapping
-
-
-#TODO read mapping from spreadsheet (last position?)
+id_mapping = []
 for d in data:
     collection =  d['title']
     print "Processing collection:", collection
@@ -158,19 +165,17 @@ for d in data:
                                             "Omeka Element Set": element_set_name,
                                             "Omeka Element": element_name})   
 
-        #TODO get mapping table
-
+      
         
         #TODO - combine with omekadd?
         for item in d['data']:
             stuff_to_upload = False
             element_texts = []
-            #First find out what maps to what
-            
+           
             for key,value in item.items():
                 if value <> None:
                     if collection in collection_field_mapping and key in collection_field_mapping[collection]:
-                        print 'Uploading ', key, value
+                        #print 'Uploading ', key, value
                         element_text = {"html": False, "text": "none"} #, "element_set": {"id": 0}}
                         element_text["element"] = {"id": collection_field_mapping[collection][key] }
                         
@@ -184,8 +189,11 @@ for d in data:
                     elif key == "Omeka Type" and value in record_type_names:
                         item_type = record_type_names[value]
                         stuff_to_upload = True
+                        
                     else:
-                        print 'Warning, not uploaded ', collection, key, value
+                        pass #TODO - log failure to upload
+                        #print 'Warning, not uploaded ', collection, key, value
+                    
                 else:
                     item[key] = ""
                     
@@ -194,25 +202,29 @@ for d in data:
                 item_to_upload = {"collection": {"id": collection_id}, "item_type": {"id":item_type}, "featured": args["featured"], "public": args["public"]}
                 item_to_upload["element_texts"] = element_texts
                 jsonstr = json.dumps(item_to_upload)
+                # Find ID
+                previous_id = None
+                if identifier_column in item and item[identifier_column] in id_to_omeka_id:
+                    previous_id = id_to_omeka_id[item[identifier_column]]
                 
-                if previous_run and 'Omeka ID' in previous[sheet]['data'][i] and previous[sheet]['data'][i]['Omeka ID'] <> "":
-                    print "Re-uploading (found ID in output)", previous[sheet]['data'][i]['Omeka ID']
-                    response, content = OmekaClient(endpoint, apikey).put("items" , str(previous[sheet]['data'][i]['Omeka ID']), jsonstr)
-                elif ("Omeka ID" in item) and (item["Omeka ID"] <> ""):
-                    print "Re-uploading (found ID in original)", item["Omeka ID"]
-                    response, content = OmekaClient(endpoint, apikey).put("items" , str(item["Omeka ID"]), jsonstr)
+                if previous_id <> None:
+                    print "Re-uploading ", previous_id
+                    response, content = OmekaClient(endpoint, apikey).put("items" , previous_id, jsonstr)
+               
                 else:
                     response, content = OmekaClient(endpoint, apikey).post("items", jsonstr)
                
                 print response
                
-           
+                #Looks like the ID wasn't actually there, so get it to mint a new one
                 if response['status'] == '404':
                      response, content = OmekaClient(endpoint, apikey).post("items", jsonstr)
                 print response
+
+                
                 new_item = json.loads(content)
                 new_item_id = new_item['id']
-                item["Omeka ID"] = new_item_id
+                id_mapping.append({'Omeka ID': new_item_id, identifier_column: item[identifier_column]})
                 print "New ID", new_item_id
                
             i += 1
@@ -222,9 +234,19 @@ for d in data:
 
 
 #data.append({'title': 'Omeka Mapping', 'data': supplied_element_names})
+mapdata = []
+##element_sheet = tablib.import_set(supplied_element_names)
+id_sheet = tablib.import_set(id_to_omeka_id)
+
+mapdata.append({'title': 'Omeka Mapping', 'data': supplied_element_names})
+mapdata.append({'title': 'ID Mapping', 'data': id_mapping})
+print data
+
+print "*******"
+print mapdata
 new_book = tablib.Databook()
-new_book.yaml = yaml.dump(data)
+new_book.yaml = yaml.dump(mapdata)
 
 
-with open("output.xlsx","wb") as f:
+with open(mapfile,"wb") as f:
     f.write(new_book.xlsx)
