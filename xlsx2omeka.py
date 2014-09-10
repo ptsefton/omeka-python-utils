@@ -4,6 +4,7 @@ import json
 import argparse
 from sys import stdin
 import sys
+import httplib2
 import os
 from omekaclient import OmekaClient
 """ Uploads an entire spreadsheet to an Omeka server """
@@ -84,6 +85,9 @@ def find_mapping(data):
     supplied_id_to_omeka_id = {}
     linked_fields = {}
     supplied_id_to_title = {}
+    download_fields  = {}
+    #So, seems like I keep adding new mapping tables all of which involve the same code
+
     for sheet in data:
         if sheet['title'] == 'Omeka Mapping':
             supplied_element_names = sheet['data']
@@ -94,7 +98,10 @@ def find_mapping(data):
                 column = row["Column"]
                 omeka_element = row["Omeka Element"]
                 linked = row["Linked"]
-                
+                if 'Download' in row and row['Download'] <> None and collection <> None:
+                    if not collection in download_fields:
+                       download_fields[collection] = {}
+                    download_fields[collection][column] = True
                 if linked <> None and linked <> False:
                     if not collection in linked_fields:
                         linked_fields[collection] = {}
@@ -105,7 +112,7 @@ def find_mapping(data):
                     element_id = element_names[omeka_element]
                     set_id = element_set_names[set]
                     collection_field_mapping[collection][column] = element_id[set_id]
-                    
+                #Stop 'None'     
                 for key, value in row.items():
                     if value == None:
                         row[key] = ""
@@ -118,7 +125,7 @@ def find_mapping(data):
                     supplied_id_to_title[row[identifier_column]] = title
                 
 
-    return collection_field_mapping, supplied_element_names, supplied_id_to_omeka_id, linked_fields, supplied_id_to_title
+    return collection_field_mapping, supplied_element_names, supplied_id_to_omeka_id, linked_fields, supplied_id_to_title, download_fields
           
 
 element_sets, element_set_names = fetch_element_sets()
@@ -139,7 +146,7 @@ if os.path.exists(mapfile):
     previous_output = tablib.import_book(open(mapfile,"rb"))
     previous = yaml.load(previous_output.yaml)
     
-    collection_field_mapping, supplied_element_names, id_to_omeka_id, linked_fields, id_to_title = find_mapping(previous)
+    collection_field_mapping, supplied_element_names, id_to_omeka_id, linked_fields, id_to_title, download_fields = find_mapping(previous)
 else:
     collection_field_mapping = {}
     id_to_omeka_id = {}
@@ -147,7 +154,7 @@ else:
     linked_fields = {}
     id_to_title = {}
 
-
+print download_fields
 
 
 
@@ -186,7 +193,8 @@ for d in data:
                                             "Column": key,
                                             "Omeka Element Set": element_set_name,
                                             "Omeka Element": element_name,
-                                            "Linked:": ""})   
+                                            "Linked:": "",
+                                            "Download": ""})   
 
       
         
@@ -194,13 +202,18 @@ for d in data:
         for item in d['data']:
             stuff_to_upload = False
             element_texts = []
-            
+            URLs = []
             for key,value in item.items():
+                
                 if value <> None:
                     if collection in collection_field_mapping and key in collection_field_mapping[collection]:
                         #print 'Uploading ', key, value
                         element_text = {"html": False, "text": "none"} #, "element_set": {"id": 0}}
                         element_text["element"] = {"id": collection_field_mapping[collection][key] }
+                        if collection in download_fields and key in download_fields[collection] and download_fields[collection][key]:
+                            print
+                            URLs.append(value)
+
                         if collection in linked_fields and key in linked_fields[collection] and linked_fields[collection][key] and value in id_to_omeka_id:
                             #TODO - deal with muliple values
                             to_title =  id_to_title[value]
@@ -254,6 +267,16 @@ for d in data:
 
                 new_item = json.loads(content)
                 new_item_id = new_item['id']
+                for url in URLs:
+                    print "Uploading", url
+                    uploadjson = {"item": {"id": new_item_id}}
+                    uploadmeta = json.dumps(uploadjson)
+                    #uploadfile = open(args["upload"], "r").read()
+                    http = httplib2.Http()
+                    response, content = http.request(url, "GET")
+                    print response
+                    response, content = OmekaClient(endpoint, apikey).post_file(uploadmeta,"test.kmz", content) 
+                    print response
                 id_mapping.append({'Omeka ID': new_item_id, identifier_column: item[identifier_column], title_column: item[title_column]})
                 print "New ID", new_item_id
                
