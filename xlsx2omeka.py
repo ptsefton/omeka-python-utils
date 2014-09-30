@@ -6,6 +6,7 @@ from sys import stdin
 import sys
 import httplib2
 import os
+import urlparse
 from omekaclient import OmekaClient
 """ Uploads an entire spreadsheet to an Omeka server """
 
@@ -43,6 +44,8 @@ def fetch_element_sets():
 
 def fetch_elements():
     response, content = OmekaClient(endpoint, apikey).get('elements')
+    
+    
     things = json.loads(content)
     thing_names = {}
     for thing in things:
@@ -80,6 +83,7 @@ def fetch_collections():
 
 #THis has grown into a big mess - returning several things
 #TODO: Refactor into an ItemsData class with all the lookups as methods
+# Need to be able to find collections and elements by name, with namespaces etc
 def find_mapping(data):
     collection_field_mapping = {}
     supplied_id_to_omeka_id = {}
@@ -98,7 +102,7 @@ def find_mapping(data):
                 column = row["Column"]
                 omeka_element = row["Omeka Element"]
                 linked = row["Linked"]
-                if 'Download' in row and row['Download'] <> None and collection <> None:
+                if row['Download'] <> None and collection <> None:
                     if not collection in download_fields:
                        download_fields[collection] = {}
                     download_fields[collection][column] = True
@@ -112,9 +116,12 @@ def find_mapping(data):
                     element_id = element_names[omeka_element]
                     set_id = element_set_names[set]
                     collection_field_mapping[collection][column] = element_id[set_id]
-                #Stop 'None'     
+                #Stop 'None' values appearing in the spreadsheet
+                # And inexplicable 'null' columns  
                 for key, value in row.items():
-                    if value == None:
+                    if key == None:
+                        del row[key]
+                    elif value == None:
                         row[key] = ""
                         
         elif sheet['title'] == 'ID Mapping':
@@ -130,13 +137,14 @@ def find_mapping(data):
 
 element_sets, element_set_names = fetch_element_sets()
 
+
+
 #Auto-map to elements from these sets
 default_element_set_names = ['Dublin Core','Item Type Metadata']
 
 elements, element_names = fetch_elements()
 record_type_names = fetch_item_types()
 collections, collection_names = fetch_collections()
-
 #Get the main data
 databook = tablib.import_book(inputfile)
 data = yaml.load(databook.yaml)
@@ -153,13 +161,13 @@ else:
     supplied_element_names = []
     linked_fields = {}
     id_to_title = {}
+    download_fields={}
 
 print download_fields
 
 
 
 
-#TODO refactor so this can replace omekadd.py
 count = 0
 sheet = 0
 
@@ -193,7 +201,7 @@ for d in data:
                                             "Column": key,
                                             "Omeka Element Set": element_set_name,
                                             "Omeka Element": element_name,
-                                            "Linked:": "",
+                                            "Linked": "",
                                             "Download": ""})   
 
       
@@ -211,7 +219,6 @@ for d in data:
                         element_text = {"html": False, "text": "none"} #, "element_set": {"id": 0}}
                         element_text["element"] = {"id": collection_field_mapping[collection][key] }
                         if collection in download_fields and key in download_fields[collection] and download_fields[collection][key]:
-                            print
                             URLs.append(value)
 
                         if collection in linked_fields and key in linked_fields[collection] and linked_fields[collection][key] and value in id_to_omeka_id:
@@ -269,20 +276,19 @@ for d in data:
                 new_item_id = new_item['id']
                 for url in URLs:
                     print "Uploading", url
+                    filename = urlparse.urlsplit(url).path.split("/")[-1]
                     uploadjson = {"item": {"id": new_item_id}}
                     uploadmeta = json.dumps(uploadjson)
                     #uploadfile = open(args["upload"], "r").read()
                     http = httplib2.Http()
                     response, content = http.request(url, "GET")
                     print response
-                    response, content = OmekaClient(endpoint, apikey).post_file(uploadmeta,"test.kmz", content) 
+                    response, content = OmekaClient(endpoint, apikey).post_file(uploadmeta, filename, content) 
                     print response
                 id_mapping.append({'Omeka ID': new_item_id, identifier_column: item[identifier_column], title_column: item[title_column]})
                 print "New ID", new_item_id
                
-            i += 1
-    
-    sheet += 1
+   
 
 
 
@@ -294,10 +300,8 @@ id_sheet = tablib.import_set(id_to_omeka_id)
 mapdata.append({'title': 'Omeka Mapping', 'data': supplied_element_names})
 mapdata.append({'title': 'ID Mapping', 'data': id_mapping})
 
-
 new_book = tablib.Databook()
 new_book.yaml = yaml.dump(mapdata)
-
 
 with open(mapfile,"wb") as f:
     f.write(new_book.xlsx)
