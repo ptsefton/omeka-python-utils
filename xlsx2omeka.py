@@ -31,120 +31,74 @@ inputfile = args['inputfile']
 identifier_column = args['identifier']
 title_column = args['title']
 
-# TODO: make all these into proper classes so you can find out tha item set an item belongs to etc without having to
-# navigate the structure directly (lots of the stuff returned by the API is lists so we want convenient ways to find things in those lists)
-
-def fetch_element_sets():
-    response, content = OmekaClient(endpoint, apikey).get('element_sets')
-    things = json.loads(content)
-    thing_names = {}
-    for thing in things:
-        thing_names[thing['name']] = thing['id']   
-    return things, thing_names
-
-def fetch_elements():
-    response, content = OmekaClient(endpoint, apikey).get('elements')
-    
-    
-    things = json.loads(content)
-    thing_names = {}
-    for thing in things:
-       if not thing['name'] in thing_names:
-           thing_names[thing['name']] = {}
-       set_id = thing['element_set']['id']
-       thing_names[thing['name']][set_id] =  thing['id']
-    return things, thing_names
-
-def fetch_item_types():
-    response, content = OmekaClient(endpoint, apikey).get('item_types')
-    things = json.loads(content)
-    thing_names = {}
-    for thing in things:
-        thing_names[thing['name']] = thing['id']
-        
-    return thing_names
-
-#Find the names & ids of collections
-def fetch_collections():
-    response, content = OmekaClient(endpoint, apikey).get('collections')
-    collections_data = json.loads(content)
-    collection_names = {}
-    collections = {}
-    for collection in collections_data:
-        collections[collection["id"]] = collection 
-        for t in collection['element_texts']:
-            if t['element']['name'] == 'Title':
-                collection_names[t['text']] =  collection['id']
-    return collections, collection_names
-
-#TODO make this a proper grown-up class
-
-
-
-#THis has grown into a big mess - returning several things
-#TODO: Refactor into an ItemsData class with all the lookups as methods
-# Need to be able to find collections and elements by name, with namespaces etc
-def find_mapping(data):
-    collection_field_mapping = {}
-    supplied_id_to_omeka_id = {}
-    linked_fields = {}
-    supplied_id_to_title = {}
-    download_fields  = {}
-    #So, seems like I keep adding new mapping tables all of which involve the same code
-
-    for sheet in data:
-        if sheet['title'] == 'Omeka Mapping':
-            supplied_element_names = sheet['data']
-            for row in sheet['data']:
-               
-                collection = row["Collection"]
-                set = row["Omeka Element Set"]
-                column = row["Column"]
-                omeka_element = row["Omeka Element"]
-                linked = row["Linked"]
-                if row['Download'] <> None and collection <> None:
-                    if not collection in download_fields:
-                       download_fields[collection] = {}
-                    download_fields[collection][column] = True
-                if linked <> None and linked <> False:
-                    if not collection in linked_fields:
-                        linked_fields[collection] = {}
-                    linked_fields[collection][column] = True
-                if omeka_element <> None and column <> None and collection <> None:
-                    if not collection in collection_field_mapping:
-                        collection_field_mapping[collection] = {}
-                    element_id = element_names[omeka_element]
-                    set_id = element_set_names[set]
-                    collection_field_mapping[collection][column] = element_id[set_id]
-                #Stop 'None' values appearing in the spreadsheet
-                # And inexplicable 'null' columns  
-                for key, value in row.items():
-                    if key == None:
-                        del row[key]
-                    elif value == None:
-                        row[key] = ""
-                        
-        elif sheet['title'] == 'ID Mapping':
-            for row in sheet['data']:
-                supplied_id_to_omeka_id[row[identifier_column]] = row["Omeka ID"]
-                title = row["Title"]
-                if title <> None:
-                    supplied_id_to_title[row[identifier_column]] = title
-                
-
-    return collection_field_mapping, supplied_element_names, supplied_id_to_omeka_id, linked_fields, supplied_id_to_title, download_fields
-          
-
-element_sets, element_set_names = fetch_element_sets()
-
-
 
 #Auto-map to elements from these sets
 default_element_set_names = ['Dublin Core','Item Type Metadata']
 
-elements, element_names = fetch_elements()
-record_type_names = fetch_item_types()
-collections, collection_names = fetch_collections()
+
+omeka_client = OmekaClient(endpoint, apikey)
+
+class XlsxMapping:
+    """Keep track of all the mapping stuff from spreadsheet to Omeka"""
+    #Still needs work on methods rather than direct access to data structures
+    
+    def __init__(self, o_client, data = []):
+        self.collection_field_mapping = {}
+        self.id_to_omeka_id = {}
+        self.linked_fields = {}
+        self.id_to_title = {}
+        self.download_fields  = {}
+        for sheet in data:
+            if sheet['title'] == 'Omeka Mapping':
+                self.supplied_element_names = sheet['data']
+                for row in sheet['data']:
+                    collection = row["Collection"]
+                    set = row["Omeka Element Set"]
+                    column = row["Column"]
+                    omeka_element = row["Omeka Element"]
+                    linked = row["Linked"]
+                    if row['Download'] <> None and collection <> None:
+                        if not collection in self.download_fields:
+                           self.download_fields[collection] = {}
+                        self.download_fields[collection][column] = True
+                    if linked <> None and linked <> False:
+                        if not collection in self.linked_fields:
+                            self.linked_fields[collection] = {}
+                        self.linked_fields[collection][column] = True
+                        
+                    if omeka_element <> None and column <> None and collection <> None:
+                        if not collection in self.collection_field_mapping:
+                            self.collection_field_mapping[collection] = {}
+                       
+                        set_id = o_client.getSetId(set)
+                        element_id = o_client.getElementId(set_id,omeka_element)
+                        print element_id
+                        #####
+                        self.collection_field_mapping[collection][column] = element_id
+                        #Stop 'None' values appearing in the spreadsheet
+                    # And inexplicable 'null' columns  
+                    for key, value in row.items():
+                        if key == None:
+                            del row[key]
+                        elif value == None:
+                            row[key] = ""
+                        
+            elif sheet['title'] == 'ID Mapping':
+                for row in sheet['data']:
+                    self.id_to_omeka_id[row[identifier_column]] = row["Omeka ID"]
+                    title = row["Title"]
+                    if title <> None:
+                        self.id_to_title[row[identifier_column]] = title
+                
+    def has_map(self, collection, key):
+        return collection in mapping.collection_field_mapping and key in mapping.collection_field_mapping[collection]
+    
+    def is_linked_field(self, collection_name, key, value):
+        return collection_name in self.linked_fields and key in self.linked_fields[collection_name] and self.linked_fields[collection_name][key] and value in self.id_to_omeka_id
+
+    def to_download(self, collection_name, key):
+        return collection_name in mapping.download_fields and key in mapping.download_fields[collection_name] and mapping.download_fields[collection_name][key]
+
 #Get the main data
 databook = tablib.import_book(inputfile)
 data = yaml.load(databook.yaml)
@@ -153,18 +107,12 @@ mapfile = inputfile.name + ".mapping.xlsx"
 if os.path.exists(mapfile):
     previous_output = tablib.import_book(open(mapfile,"rb"))
     previous = yaml.load(previous_output.yaml)
-    
-    collection_field_mapping, supplied_element_names, id_to_omeka_id, linked_fields, id_to_title, download_fields = find_mapping(previous)
 else:
-    collection_field_mapping = {}
-    id_to_omeka_id = {}
-    supplied_element_names = []
-    linked_fields = {}
-    id_to_title = {}
-    download_fields={}
+     previous = []
 
-print download_fields
+mapping = XlsxMapping(omeka_client, previous)
 
+print mapping
 
 
 
@@ -173,60 +121,51 @@ sheet = 0
 
 id_mapping = []
 for d in data:
-    collection =  d['title']
-    print "Processing collection:", collection
-   
-    
-    if collection <> "Omeka Mapping" and collection in collection_names:
-        collection_id = collection_names[collection]
-        i = 0
-        
+    collection_name =  d['title']
+    print "Processing potential collection: ", collection_name
+    collection_id = omeka_client.getCollectionId(collection_name)
+    if collection_name <> "Omeka Mapping" and collection_id <> None:
+        print collection_id
        #Work out which fields can be automagically mapped
-        if not collection in collection_field_mapping:
+        if not collection_name in mapping.collection_field_mapping:
             print "No mapping data for this collection. Attempting to make one"
-            collection_field_mapping[collection] = {}
+            mapping.collection_field_mapping[collection] = {}
             for key in d['data'][0]:
-                element_set_name = ""
-                element_name = ""
                 for set_name in default_element_set_names:
-                    set_id = element_set_names[set_name]
-                    if key in element_names and set_id in element_names[key]:
-                        element_name = key
-                        element_set_name = set_name
-                        element_set_id = set_id
-                        element_id = element_names[key][set_id]
-                        collection_field_mapping[collection][element_name]= element_id
-                        
-                supplied_element_names.append({"Collection": collection,
+                    set_id = omeka_client.getSetId(set_name)
+                    element_id = omeka_client.getElementId(set_name, key)
+                    if element_id <> None and not key in mapping.collection_field_mapping[collection_name][key]:
+                        mapping.collection_field_mapping[collection_name][key] = element_id
+                        mapping.supplied_element_names.append({"Collection": collection_name,
                                             "Column": key,
-                                            "Omeka Element Set": element_set_name,
-                                            "Omeka Element": element_name,
+                                            "Omeka Element Set": set_name,
+                                            "Omeka Element": key,
                                             "Linked": "",
                                             "Download": ""})   
 
-      
-        
+        print mapping.collection_field_mapping[collection_name]
+
         #TODO - combine with omekadd?
         for item in d['data']:
             stuff_to_upload = False
             element_texts = []
             URLs = []
             for key,value in item.items():
-                
                 if value <> None:
-                    if collection in collection_field_mapping and key in collection_field_mapping[collection]:
+                    if mapping.has_map(collection_name, key):
                         #print 'Uploading ', key, value
                         element_text = {"html": False, "text": "none"} #, "element_set": {"id": 0}}
-                        element_text["element"] = {"id": collection_field_mapping[collection][key] }
-                        if collection in download_fields and key in download_fields[collection] and download_fields[collection][key]:
+                        element_text["element"] = {"id": mapping.collection_field_mapping[collection_name][key] }
+                       
+                        if mapping.to_download(collection_name, key):
                             URLs.append(value)
-
-                        if collection in linked_fields and key in linked_fields[collection] and linked_fields[collection][key] and value in id_to_omeka_id:
+                      
+                        if mapping.is_linked_field(collection_name, key, value):
                             #TODO - deal with muliple values
-                            to_title =  id_to_title[value]
+                            to_title =  mapping.id_to_title[value]
                             if to_title == None:
-                                to_title =  id_to_omeka_id[value]
-                            element_text["text"] = "<a href='/items/show/%s'>%s</a>" % (id_to_omeka_id[value], to_title)
+                                to_title =  mapping.id_to_omeka_id[value]
+                            element_text["text"] = "<a href='/items/show/%s'>%s</a>" % (mapping.id_to_omeka_id[value], to_title)
                             element_text["html"] = True
                             print "Uploading HTML", key, value, element_text["text"]
                         else:
@@ -235,12 +174,13 @@ for d in data:
                                 
                             except:
                                 print "ERROR - failed to add", value
-                                pass
+
                         element_texts.append(element_text)
                        
-                    elif key == "Omeka Type" and value in record_type_names:
-                        item_type = record_type_names[value]
-                        stuff_to_upload = True
+                    elif key == "Omeka Type":
+                        item_type_id = omeka_client.getItemTypeId(value)
+                        if item_type_id <> None:
+                            stuff_to_upload = True
                         
                     else:
                         pass #TODO - log failure to upload
@@ -253,13 +193,13 @@ for d in data:
                 stuff_to_upload = False
                 print "No identifier (%s) in table" % identifier_column
             if stuff_to_upload:
-                item_to_upload = {"collection": {"id": collection_id}, "item_type": {"id":item_type}, "featured": args["featured"], "public": args["public"]}
+                item_to_upload = {"collection": {"id": collection_id}, "item_type": {"id":item_type_id}, "featured": args["featured"], "public": args["public"]}
                 item_to_upload["element_texts"] = element_texts
                 jsonstr = json.dumps(item_to_upload)
                 # Find ID
                 previous_id = None
-                if identifier_column in item and item[identifier_column] in id_to_omeka_id:
-                    previous_id = id_to_omeka_id[item[identifier_column]]
+                if identifier_column in item and item[identifier_column] in mapping.id_to_omeka_id:
+                    previous_id = mapping.id_to_omeka_id[item[identifier_column]]
                 
                 if previous_id <> None:
                     print "Re-uploading ", previous_id
@@ -279,12 +219,13 @@ for d in data:
                     filename = urlparse.urlsplit(url).path.split("/")[-1]
                     uploadjson = {"item": {"id": new_item_id}}
                     uploadmeta = json.dumps(uploadjson)
-                    #uploadfile = open(args["upload"], "r").read()
+                    
                     http = httplib2.Http()
                     response, content = http.request(url, "GET")
                     print response
                     response, content = OmekaClient(endpoint, apikey).post_file(uploadmeta, filename, content) 
-                    print response
+                    print response, content
+                    
                 id_mapping.append({'Omeka ID': new_item_id, identifier_column: item[identifier_column], title_column: item[title_column]})
                 print "New ID", new_item_id
                
@@ -292,12 +233,11 @@ for d in data:
 
 
 
-#data.append({'title': 'Omeka Mapping', 'data': supplied_element_names})
 mapdata = []
-##element_sheet = tablib.import_set(supplied_element_names)
-id_sheet = tablib.import_set(id_to_omeka_id)
 
-mapdata.append({'title': 'Omeka Mapping', 'data': supplied_element_names})
+id_sheet = tablib.import_set(mapping.id_to_omeka_id)
+
+mapdata.append({'title': 'Omeka Mapping', 'data': mapping.supplied_element_names})
 mapdata.append({'title': 'ID Mapping', 'data': id_mapping})
 
 new_book = tablib.Databook()
