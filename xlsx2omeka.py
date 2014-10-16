@@ -48,6 +48,7 @@ class XlsxMapping:
         self.linked_fields = {}
         self.id_to_title = {}
         self.download_fields  = {}
+        self.supplied_element_names = []
         for sheet in data:
             if sheet['title'] == 'Omeka Mapping':
                 self.supplied_element_names = sheet['data']
@@ -129,12 +130,12 @@ for d in data:
        #Work out which fields can be automagically mapped
         if not collection_name in mapping.collection_field_mapping:
             print "No mapping data for this collection. Attempting to make one"
-            mapping.collection_field_mapping[collection] = {}
+            mapping.collection_field_mapping[collection_name] = {}
             for key in d['data'][0]:
                 for set_name in default_element_set_names:
                     set_id = omeka_client.getSetId(set_name)
-                    element_id = omeka_client.getElementId(set_name, key)
-                    if element_id <> None and not key in mapping.collection_field_mapping[collection_name][key]:
+                    element_id = omeka_client.getElementId(set_id, key)
+                    if element_id <> None and not key in mapping.collection_field_mapping[collection_name]:
                         mapping.collection_field_mapping[collection_name][key] = element_id
                         mapping.supplied_element_names.append({"Collection": collection_name,
                                             "Column": key,
@@ -245,3 +246,4 @@ new_book.yaml = yaml.dump(mapdata)
 
 with open(mapfile,"wb") as f:
     f.write(new_book.xlsx)
+

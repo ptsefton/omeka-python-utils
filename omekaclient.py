@@ -63,9 +63,11 @@ class OmekaClient:
                 self.elements[name] = {}
                 for el in res:
                     self.elements[name][el["element_set"]["id"]] = el
-            else:
-                return None
-        return self.elements[name][set_id]["id"]
+
+        if name in self.elements and set_id in self.elements[name] and "id" in self.elements[name][set_id]:
+            return self.elements[name][set_id]["id"]
+        else:
+            return None
 
     def getCollectionId(self, name):
         """Find an Omeka collection by name and cache the results:
