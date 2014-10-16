@@ -8,13 +8,15 @@ import httplib2
 import os
 import urlparse
 from omekaclient import OmekaClient
+from omekautils import get_omeka_config
+
 """ Uploads an entire spreadsheet to an Omeka server """
 
 # Define and parse command-line arguments
 parser = argparse.ArgumentParser()
 parser.add_argument('inputfile', type=argparse.FileType('rb'),  default=stdin, help='Name of input Excel file')
-parser.add_argument('endpoint',  default=stdin, help='Omeka Server')
-parser.add_argument('keyfile',nargs="?", help='File name where you have stashed your Omeka key') #  type=argparse.FileType('rb'),
+# parser.add_argument('endpoint',  default=stdin, help='Omeka Server')
+# parser.add_argument('keyfile',nargs="?", help='File name where you have stashed your Omeka key') #  type=argparse.FileType('rb'),
 parser.add_argument('-i', '--identifier', action='store_true',default="Identifier", help='Name of an Identifier column in the input spreadsheet. ')
 parser.add_argument('-t', '--title', action='store_true',default="Title", help='Name of a Title column in the input spreadsheet. ')
 parser.add_argument('-p', '--public', action='store_true', help='Make items public')
@@ -25,8 +27,11 @@ parser.add_argument('-f', '--featured', action='store_true', help='Make items fe
 parser.add_argument('-m', '--mdmark', default="markdown>", help='Change string prefix that triggers markdown conversion; default is "markdown>"')
 args = vars(parser.parse_args())
 #TODO - fix reading API key from file
-apikey = args['keyfile']#.read()
-endpoint = args['endpoint']
+config = get_omeka_config()
+endpoint = config['api_url']
+apikey   = config['key']
+# apikey = args['keyfile']#.read()
+# endpoint = args['endpoint']
 inputfile = args['inputfile']
 identifier_column = args['identifier']
 title_column = args['title']
@@ -163,10 +168,7 @@ else:
     id_to_title = {}
     download_fields={}
 
-print download_fields
-
-
-
+print "download_fields:         ", download_fields
 
 count = 0
 sheet = 0
@@ -212,7 +214,6 @@ for d in data:
             element_texts = []
             URLs = []
             for key,value in item.items():
-                
                 if value <> None:
                     if collection in collection_field_mapping and key in collection_field_mapping[collection]:
                         #print 'Uploading ', key, value

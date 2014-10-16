@@ -6,7 +6,14 @@ Some quick notes, to be turned into a how-to later.
 
 usage
 
-python xlsx2omeka.py http://address.of.omeka input-file.xlsx omeka-key -i Identifier -t Title
+python xlsx2omeka.py input-file.xlsx -i Identifier -t Title
+
+The address of the Omeka server to use and your API key for it should be in ~/.omeka.config, e.g.:
+
+{
+   "api_url":"http://130.220.210.60/api",
+   "key":"apparentlyrandomcharacters"
+}
 
 
 What it does:
