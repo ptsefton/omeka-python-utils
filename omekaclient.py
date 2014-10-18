@@ -34,6 +34,21 @@ class OmekaClient:
         types_data = json.loads(content)
         for type in types_data:
             self.types[type["name"]] = type
+            
+    def addItemRelation(self, subject_id, property_id, object_id):
+        """Relate two items (for now has a check to make sure they aren't related in the same way already until that can be baked into the API"""
+        relation_data = {"subject_item_id": subject_id,
+                         "object_item_id":  object_id,
+                         "property_id": property_id}
+        response, content = self.get('item_relations', query=relation_data)
+       
+        res = json.loads(content)
+        print "relations search:" , res
+        if len(res) == 0:
+            response, content = self.post('item_relations', json.dumps(relation_data))
+            print content;
+        else:
+            print "Already related"
 
     def getItemTypeId(self, name):
         """Find get item_type by ID by name and cache the results:
@@ -129,6 +144,5 @@ class OmekaClient:
         if self._key is not None:
             query["key"] = self._key
         url += "?" + urllib.urlencode(query)
-        print url
         resp, content = self._http.request(url, method, body=data, headers=headers)
         return resp, content
