@@ -2,6 +2,7 @@ import httplib2
 import urllib
 import mimetypes
 import json
+import os
 
 
 class OmekaItem:
@@ -106,6 +107,14 @@ class OmekaClient:
     def post(self, resource, data, query={}, headers={}):
         return self._request("POST", resource, data=data, query=query, headers=headers)
     
+    def post_file_from_filename(self, file, id):
+        filename = os.path.split(file)[-1]
+        uploadjson = {"item": {"id": id}}
+        uploadmeta = json.dumps(uploadjson)
+        http = httplib2.Http()
+        content = open(file).read()
+        return self.post_file(uploadmeta, filename, content) 
+        
     def put(self, resource, id, data, query={}):
         return self._request("PUT", resource, id, data=data, query=query)
     
@@ -132,7 +141,7 @@ class OmekaClient:
         headers['content-length'] = str(len(body))
         query = {}
         return self.post("files", body, query, headers)
-     
+      
     def get_content_type(self, filename):
         """ use mimetypes to detect type of file to be uploaded """
         return mimetypes.guess_type(filename)[0] or 'application/octet-stream'

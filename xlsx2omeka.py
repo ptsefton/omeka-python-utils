@@ -50,6 +50,7 @@ class XlsxMapping:
         self.id_to_title = {}
         self.download_fields  = {}
         self.supplied_element_names = []
+        self.file_fields = {}
         for sheet in data:
             if sheet['title'] == 'Omeka Mapping':
                 self.supplied_element_names = sheet['data']
@@ -58,29 +59,33 @@ class XlsxMapping:
                     set = row["Omeka Element Set"]
                     column = row["Column"]
                     omeka_element = row["Omeka Element"]
-                    if "Linked" in row:
-                        linked = row["Linked"]
-                    else:
-                        row["Linked"] = ""
-                    if "Related" in row:
-                        related = row["Related"]
-                    else:
-                        row["Related"] = ""
+                    if not "Linked" in row:
+                        row["Linked"] = None
+                    if  not "Related" in row:
+                        row["Related"] = None
+                    if not "File" in row:
+                        row["File"] = None
+                       
             
                     if row['Download'] <> None and collection <> None:
                         if not collection in self.download_fields:
                            self.download_fields[collection] = {}
                         self.download_fields[collection][column] = True
+
+                    if row['File'] <> None and collection <> None:
+                        if not collection in self.file_fields:
+                           self.file_fields[collection] = {}
+                        self.file_fields[collection][column] = True
                         
-                    if linked <> None and collection <> None:
+                    if row["Linked"] <> None and collection <> None:
                         if not collection in self.linked_fields:
                             self.linked_fields[collection] = {}
                         self.linked_fields[collection][column] = True
                         
-                    if related <> None and collection <> None:
+                    if row["Related"] <> None and collection <> None:
                         if not collection in self.related_fields:
                             self.related_fields[collection] = {}
-                        self.related_fields[collection][column] = related
+                        self.related_fields[collection][column] = row["Related"]
                         
                     if omeka_element <> None and column <> None and collection <> None:
                         if not collection in self.collection_field_mapping:
@@ -88,7 +93,7 @@ class XlsxMapping:
                        
                         set_id = o_client.getSetId(set)
                         element_id = o_client.getElementId(set_id,omeka_element)
-                       
+    
                         self.collection_field_mapping[collection][column] = element_id
                     #Stop 'None' values appearing in the spreadsheet
                     # And inexplicable 'null' columns  
@@ -104,7 +109,7 @@ class XlsxMapping:
                     title = row["Title"]
                     if title <> None:
                         self.id_to_title[row[identifier_column]] = title
-
+           
             
     def has_map(self, collection, key):
         return collection in mapping.collection_field_mapping and key in mapping.collection_field_mapping[collection]
@@ -119,7 +124,10 @@ class XlsxMapping:
             return (None, None)
     
     def to_download(self, collection_name, key):
-        return collection_name in mapping.download_fields and key in mapping.download_fields[collection_name] and mapping.download_fields[collection_name][key]
+        return collection_name in self.download_fields and key in self.download_fields[collection_name] and self.download_fields[collection_name][key]
+
+    def is_file(self, collection_name, key):
+        return collection_name in self.file_fields and key in self.file_fields[collection_name] and self.file_fields[collection_name][key]
 
 #Get the main data
 databook = tablib.import_book(inputfile)
@@ -134,7 +142,6 @@ else:
 
 mapping = XlsxMapping(omeka_client, previous)
 
-print mapping
 
 
 
@@ -146,8 +153,7 @@ for d in data:
     collection_name =  d['title']
     print "Processing potential collection: ", collection_name
     collection_id = omeka_client.getCollectionId(collection_name)
-    if collection_name <> "Omeka Mapping" and collection_id <> None:
-        print collection_id
+    if collection_id <> None:
        #Work out which fields can be automagically mapped
         if not collection_name in mapping.collection_field_mapping:
             print "No mapping data for this collection. Attempting to make one"
@@ -164,28 +170,31 @@ for d in data:
                                             "Omeka Element": key,
                                             "Linked": "",
                                             "Related": "",
-                                            "Download": ""})   
-
-        print mapping.collection_field_mapping[collection_name]
-
-        #TODO - combine with omekadd?
+                                            "Download": "",
+                                             "File": ""})   
+        print mapping.file_fields
+       
         for item in d['data']:
             stuff_to_upload = False
             relations = []
             element_texts = []
             URLs = []
+            files = []
             for key,value in item.items():
                 (property_id, object_id) = mapping.item_relation(collection_name, key, value)
-                
+                print key
                 if value <> None:
                     if mapping.has_map(collection_name, key):
-                        #print 'Uploading ', key, value
                         element_text = {"html": False, "text": "none"} #, "element_set": {"id": 0}}
                         element_text["element"] = {"id": mapping.collection_field_mapping[collection_name][key] }
                        
                         if mapping.to_download(collection_name, key):
+                            print "Need to map"
                             URLs.append(value)
-                      
+                        if mapping.is_file(collection_name, key):
+                            print "Need to map"
+                            files.append(value)
+                            
                         if mapping.is_linked_field(collection_name, key, value):
                             #TODO - deal with muliple values
                             to_title =  mapping.id_to_title[value]
@@ -258,7 +267,12 @@ for d in data:
                     print response
                     response, content = omeka_client.post_file(uploadmeta, filename, content) 
                     print response, content
+                for file in files:
+                    print "Uploading", file
                     
+                    print omeka_client.post_file_from_filename(file, new_item_id )
+
+                   
                 id_mapping.append({'Omeka ID': new_item_id, identifier_column: item[identifier_column], title_column: item[title_column]})
                 print "New ID", new_item_id
                 
