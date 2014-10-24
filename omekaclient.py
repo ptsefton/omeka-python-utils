@@ -118,8 +118,6 @@ class OmekaClient:
             upload_this = True
             
             for attachment in attachments:
-                print attachment
-                print "Uploading a %s byte file named %s" % (str(size),filename)
                 if attachment["size"] == size and attachment["original_filename"] == filename:
                     print "********** There is already a %s byte file named %s, not uploading *******" % (str(size),filename)
                     upload_this = False
