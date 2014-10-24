@@ -15,7 +15,6 @@ from omekautils import get_omeka_config
 # Define and parse command-line arguments
 parser = argparse.ArgumentParser()
 parser.add_argument('inputfile', type=argparse.FileType('rb'),  default=stdin, help='Name of input Excel file')
-#parser.add_argument('endpoint',  default=stdin, help='Key')
 parser.add_argument('-i', '--identifier', action='store_true',default="Identifier", help='Name of an Identifier column in the input spreadsheet. ')
 parser.add_argument('-t', '--title', action='store_true',default="Title", help='Name of a Title column in the input spreadsheet. ')
 parser.add_argument('-p', '--public', action='store_true', help='Make items public')
@@ -25,11 +24,8 @@ args = vars(parser.parse_args())
 
 
 config = get_omeka_config()
-
 endpoint = config['api_url']
-#endpoint = args['endpoint']
 apikey   = config['key']
-#apikey = args['key']
 inputfile = args['inputfile']
 identifier_column = args['identifier']
 title_column = args['title']
