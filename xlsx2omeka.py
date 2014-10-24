@@ -8,25 +8,28 @@ import httplib2
 import os
 import urlparse
 from omekaclient import OmekaClient
+from omekautils import get_omeka_config
+
 """ Uploads an entire spreadsheet to an Omeka server """
 
 # Define and parse command-line arguments
 parser = argparse.ArgumentParser()
 parser.add_argument('inputfile', type=argparse.FileType('rb'),  default=stdin, help='Name of input Excel file')
-parser.add_argument('endpoint',  default=stdin, help='Omeka Server')
-parser.add_argument('keyfile',nargs="?", help='File name where you have stashed your Omeka key') #  type=argparse.FileType('rb'),
+#parser.add_argument('endpoint',  default=stdin, help='Key')
 parser.add_argument('-i', '--identifier', action='store_true',default="Identifier", help='Name of an Identifier column in the input spreadsheet. ')
 parser.add_argument('-t', '--title', action='store_true',default="Title", help='Name of a Title column in the input spreadsheet. ')
 parser.add_argument('-p', '--public', action='store_true', help='Make items public')
 parser.add_argument('-f', '--featured', action='store_true', help='Make items featured')
-#parser.add_argument('-c', '--collection', type=int, default=None, help='Add item to collection n')
-#parser.add_argument('-t', '--type', type=int, default=1, help='Specify item type using Omeka id; default is 1, for "Document"')
-#parser.add_argument('-u', '--upload', default=None, help='Name of file to upload and attach to item')
 parser.add_argument('-m', '--mdmark', default="markdown>", help='Change string prefix that triggers markdown conversion; default is "markdown>"')
 args = vars(parser.parse_args())
-#TODO - fix reading API key from file
-apikey = args['keyfile']#.read()
-endpoint = args['endpoint']
+
+
+config = get_omeka_config()
+
+endpoint = config['api_url']
+#endpoint = args['endpoint']
+apikey   = config['key']
+#apikey = args['key']
 inputfile = args['inputfile']
 identifier_column = args['identifier']
 title_column = args['title']
@@ -36,7 +39,7 @@ title_column = args['title']
 default_element_set_names = ['Dublin Core','Item Type Metadata']
 
 
-omeka_client = OmekaClient(endpoint, apikey)
+omeka_client = OmekaClient(endpoint.encode("utf-8"), apikey)
 
 class XlsxMapping:
     """Keep track of all the mapping stuff from spreadsheet to Omeka"""
@@ -140,10 +143,8 @@ if os.path.exists(mapfile):
 else:
      previous = []
 
+
 mapping = XlsxMapping(omeka_client, previous)
-
-
-
 
 count = 0
 sheet = 0
@@ -182,7 +183,8 @@ for d in data:
             files = []
             for key,value in item.items():
                 (property_id, object_id) = mapping.item_relation(collection_name, key, value)
-                print key
+
+
                 if value <> None:
                     if mapping.has_map(collection_name, key):
                         element_text = {"html": False, "text": "none"} #, "element_set": {"id": 0}}

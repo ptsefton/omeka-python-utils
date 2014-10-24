@@ -23,6 +23,7 @@ class OmekaClient:
     
     def __init__(self, endpoint, key=None):
         self._endpoint = endpoint
+        
         self._key = key
         self._http = httplib2.Http()
         self.sets = {} #Keep a dict of element sets keyed by name
@@ -108,11 +109,13 @@ class OmekaClient:
         return self._request("POST", resource, data=data, query=query, headers=headers)
     
     def post_file_from_filename(self, file, id):
+
+            
         filename = os.path.split(file)[-1]
         uploadjson = {"item": {"id": id}}
         uploadmeta = json.dumps(uploadjson)
         http = httplib2.Http()
-        content = open(file).read()
+        content = open(file, "rb").read()
         return self.post_file(uploadmeta, filename, content) 
         
     def put(self, resource, id, data, query={}):
