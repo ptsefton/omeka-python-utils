@@ -21,7 +21,6 @@ parser.add_argument('-i', '--identifier', action='store_true',default="Identifie
 parser.add_argument('-t', '--title', action='store_true',default="Title", help='Name of a Title column in the input spreadsheet. ')
 parser.add_argument('-p', '--public', action='store_true', help='Make items public')
 parser.add_argument('-f', '--featured', action='store_true', help='Make items featured')
-parser.add_argument('-m', '--mdmark', default="markdown>", help='Change string prefix that triggers markdown conversion; default is "markdown>"')
 args = vars(parser.parse_args())
 
 
@@ -185,10 +184,13 @@ for d in data:
 
 
                 if value <> None:
-                    if mapping.has_map(collection_name, key):
-                        element_text = {"html": False, "text": "none"} #, "element_set": {"id": 0}}
-                        element_text["element"] = {"id": mapping.collection_field_mapping[collection_name][key] }
-                       
+                    if mapping.has_map(collection_name, key  ):
+                        
+                        if  mapping.collection_field_mapping[collection_name][key] <> None:
+                            element_text = {"html": False, "text": "none"} #, "element_set": {"id": 0}}
+                            element_text["element"] = {"id": mapping.collection_field_mapping[collection_name][key] }
+                        else:
+                            element_text = {}
                         if mapping.to_download(collection_name, key):
                             print "Need to map"
                             URLs.append(value)
@@ -247,16 +249,22 @@ for d in data:
                 if previous_id <> None:
                     print "Re-uploading ", previous_id
                     response, content = omeka_client.put("items" , previous_id, jsonstr)
-               
+                
                 else:
                     response, content = omeka_client.post("items", jsonstr)
               
                 #Looks like the ID wasn't actually there, so get it to mint a new one
                 if response['status'] == '404':
+                     print "retrying"
                      response, content = omeka_client.post("items", jsonstr)
 
                 new_item = json.loads(content)
-                new_item_id = new_item['id']
+                
+                try:
+                    new_item_id = new_item['id']
+                except:
+                    print item_to_upload, response, content
+                    
                 for url in URLs:
                     print "Uploading", url
                     filename = urlparse.urlsplit(url).path.split("/")[-1]
