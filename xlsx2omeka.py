@@ -15,6 +15,8 @@ from omekautils import get_omeka_config
 # Define and parse command-line arguments
 parser = argparse.ArgumentParser()
 parser.add_argument('inputfile', type=argparse.FileType('rb'),  default=stdin, help='Name of input Excel file')
+parser.add_argument('-k', '--key', default=None, help='Omeka API Key')
+parser.add_argument('-u', '--api_url',default=None, help='Omeka API Endpoint URL (hint, ends in /api)')
 parser.add_argument('-i', '--identifier', action='store_true',default="Identifier", help='Name of an Identifier column in the input spreadsheet. ')
 parser.add_argument('-t', '--title', action='store_true',default="Title", help='Name of a Title column in the input spreadsheet. ')
 parser.add_argument('-p', '--public', action='store_true', help='Make items public')
@@ -24,8 +26,9 @@ args = vars(parser.parse_args())
 
 
 config = get_omeka_config()
-endpoint = config['api_url']
-apikey   = config['key']
+endpoint = args['api_url'] if args['api_url'] <> None else config['api_url']
+apikey   = args['key'] if args['api_url'] <> None else config['key']
+omeka_client = OmekaClient(endpoint.encode("utf-8"), apikey)
 inputfile = args['inputfile']
 identifier_column = args['identifier']
 title_column = args['title']
@@ -203,7 +206,7 @@ for d in data:
                             print "Uploading HTML", key, value, element_text["text"]
                         elif property_id <> None:
                             print "Relating this item to another"
-                            
+    
                             relations.append((property_id, object_id))
                             #TODO check for existing relation
                             

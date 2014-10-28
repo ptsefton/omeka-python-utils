@@ -32,11 +32,7 @@ class OmekaClient:
 
         
         self.types = {} # Dict of item_types
-        response, content = self.get('item_types')
-        types_data = json.loads(content)
-        for type in types_data:
-            self.types[type["name"]] = type
-            
+        
     def addItemRelation(self, subject_id, property_id, object_id):
         """Relate two items (for now has a check to make sure they aren't related in the same way already until that can be baked into the API"""
         relation_data = {"subject_item_id": subject_id,
@@ -52,54 +48,83 @@ class OmekaClient:
         else:
             print "Already related"
 
-    def getItemTypeId(self, name):
+    def getItemTypeId(self, name, create=False):
         """Find get item_type by ID by name and cache the results:
            WARNING - does not deal with multiple pages of results or collections with the same Title"""
+        
         if name in self.types:   
             return self.types[name]["id"]
         else:
-            return None
+            response, content = self.get('item_types', query={"name":name})
+            types_data = json.loads(content)
+            if types_data <> []:
+                self.types[name] = types_data[0]
+                return types_data[0]["id"]
+            elif create:
+                response, content = self.get('item_types', query={"name":name})
+                types_data = json.loads(content)
+                self.types[name] = types_data[0]
+                return types_data[0]["id"]
+            else:
+                return None
+            
 
-    def getSetId(self, name):
+    def getSetId(self, name, create=False):
         """Find an Omeka element_set by name and cache the results"""
         if not name in self.sets:
             response, content = self.get('element_sets', query={"name": name})
             res = json.loads(content)
-            if res <> []:
-                self.sets[name]  = res[0]
+            if res <> [] or create:
+                if create and res == []:
+                    response, content = self.post('element_sets', json.dumps({"name": name}))
+                    set_data = json.loads(content)
+                else:
+                    set_data = res[0]
+                self.sets[name]  = set_data
+                print set_data
             else:
-                return None
+                 return None
         return self.sets[name]["id"]
 
-    def getElementId(self, set_id, name):
+    def getElementId(self, set_id, name, create=False):
         """Find all the elements by element name and cache the results keyed by name / element set id"""
         if not name in self.elements:
-            response, content = self.get('elements', query={"name": name})
+            response, content = self.get('elements', query={"name": name, "element_set": set_id})
             res = json.loads(content)
-            if res <> []:
-                self.elements[name] = {}
-                for el in res:
-                    self.elements[name][el["element_set"]["id"]] = el
+            if res <> [] or create:
+                if create and res == []: #TODO deal with t
+                    response, content = self.post('elements', json.dumps({"name": name, "element_set" : {"id": set_id}}))
+                    el_data = json.loads(content)
+                else:
+                    el_data = res[0]
+                if not name in self.elements:
+                    self.elements[name] = {}
+                self.elements[name][set_id] = el_data
 
         if name in self.elements and set_id in self.elements[name] and "id" in self.elements[name][set_id]:
             return self.elements[name][set_id]["id"]
         else:
             return None
 
-    def getCollectionId(self, name):
+    def getCollectionId(self, name, create=False):
         """Find an Omeka collection by name and cache the results:
            WARNING - does not deal with multiple pages of results or collections with the same Title"""
+        def getTitle(collection):
+            for t in collection['element_texts']:
+                    if t['element']['name'] == 'Title':
+                        self.collections[t['text']] =  collection
+                        
         if self.collections == {}:
             response, content = self.get('collections')
             collections_data = json.loads(content)
             for collection in collections_data:
-                 for t in collection['element_texts']:
-                    if t['element']['name'] == 'Title':
-                        self.collections[t['text']] =  collection
+                 getTitle(collection)
                  
         if name in self.collections:   
             return self.collections[name]["id"]
-        else:
+        elif create:
+            response, content = self.post('collections', json.dumps({"name": name}))
+            collection = json.loads(content)
             return None
     
     def get(self, resource, id=None, query={}):
