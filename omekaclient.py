@@ -61,7 +61,7 @@ class OmekaClient:
                 self.types[name] = types_data[0]
                 return types_data[0]["id"]
             elif create:
-                response, content = self.get('item_types', query={"name":name})
+                response, content = self.post('item_types', query={"name":name})
                 types_data = json.loads(content)
                 self.types[name] = types_data[0]
                 return types_data[0]["id"]
@@ -81,7 +81,6 @@ class OmekaClient:
                 else:
                     set_data = res[0]
                 self.sets[name]  = set_data
-                print set_data
             else:
                  return None
         return self.sets[name]["id"]

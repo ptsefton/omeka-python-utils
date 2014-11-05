@@ -18,10 +18,15 @@ parser.add_argument('inputfile', type=argparse.FileType('rb'),  default=stdin, h
 parser.add_argument('-k', '--key', default=None, help='Omeka API Key')
 parser.add_argument('-u', '--api_url',default=None, help='Omeka API Endpoint URL (hint, ends in /api)')
 parser.add_argument('-i', '--identifier', action='store_true',default="Identifier", help='Name of an Identifier column in the input spreadsheet. ')
+parser.add_argument('-d', '--download_cache', action='store_true',default="./data", help='Path to a directory in which to chache dowloads (defaults to ./data)')
 parser.add_argument('-t', '--title', action='store_true',default="Title", help='Name of a Title column in the input spreadsheet. ')
 parser.add_argument('-p', '--public', action='store_true', help='Make items public')
 parser.add_argument('-f', '--featured', action='store_true', help='Make items featured')
+parser.add_argument('-c', '--createcollections', action='store_true', help='Auto-create missing collections')
+parser.add_argument('-y', '--createtypes', action='store_true', help='Auto-create missing item types')
 args = vars(parser.parse_args())
+
+print args['createcollections']
 
 
 config = get_omeka_config()
@@ -31,6 +36,7 @@ omeka_client = OmekaClient(endpoint.encode("utf-8"), apikey)
 inputfile = args['inputfile']
 identifier_column = args['identifier']
 title_column = args['title']
+data_dir = args['download_cache']
 
 
 #Auto-map to elements from these sets
@@ -50,6 +56,8 @@ class XlsxMapping:
         self.related_fields = {}
         self.id_to_title = {}
         self.download_fields  = {}
+        self.url_to_file = {}
+        self.downloads = []
         self.supplied_element_names = []
         self.file_fields = {}
         for sheet in data:
@@ -110,7 +118,12 @@ class XlsxMapping:
                     title = row["Title"]
                     if title <> None:
                         self.id_to_title[row[identifier_column]] = title
-           
+
+            #TODO - new sheet, download cache
+            elif sheet['title'] == 'Downloads':
+                for row in sheet['data']:
+                    self.url_to_file[row['url']] = row['file']
+                  
             
     def has_map(self, collection, key):
         return collection in mapping.collection_field_mapping and key in mapping.collection_field_mapping[collection]
@@ -129,6 +142,13 @@ class XlsxMapping:
 
     def is_file(self, collection_name, key):
         return collection_name in self.file_fields and key in self.file_fields[collection_name] and self.file_fields[collection_name][key]
+
+    def downloaded_file(self, url):
+        return self.url_to_file[url] if url in self.url_to_file else None
+    
+    def add_downloaded_file(self, url, file):
+        self.url_to_file['url'] = file
+        self.downloads.append({'url': url, 'file': file})
 
 #Get the main data
 databook = tablib.import_book(inputfile)
@@ -151,7 +171,7 @@ id_mapping = []
 for d in data:
     collection_name =  d['title']
     print "Processing potential collection: ", collection_name
-    collection_id = omeka_client.getCollectionId(collection_name)
+    collection_id = omeka_client.getCollectionId(collection_name, create=args['createcollections'])
     if collection_id <> None:
        #Work out which fields can be automagically mapped
         if not collection_name in mapping.collection_field_mapping:
@@ -171,7 +191,6 @@ for d in data:
                                             "Related": "",
                                             "Download": "",
                                              "File": ""})   
-        print mapping.file_fields
        
         for item in d['data']:
             stuff_to_upload = False
@@ -184,8 +203,7 @@ for d in data:
 
 
                 if value <> None:
-                    if mapping.has_map(collection_name, key  ):
-                        
+                    if mapping.has_map(collection_name, key):
                         if  mapping.collection_field_mapping[collection_name][key] <> None:
                             element_text = {"html": False, "text": "none"} #, "element_set": {"id": 0}}
                             element_text["element"] = {"id": mapping.collection_field_mapping[collection_name][key] }
@@ -263,22 +281,32 @@ for d in data:
                 try:
                     new_item_id = new_item['id']
                 except:
+                    print '********* FAILED TO UPLOAD'
                     print item_to_upload, response, content
                     
                 for url in URLs:
-                    print "Uploading", url
-                    filename = urlparse.urlsplit(url).path.split("/")[-1]
-                    uploadjson = {"item": {"id": new_item_id}}
-                    uploadmeta = json.dumps(uploadjson)
+                    file_path = mapping.downloaded_file(url)
+                    print "Found something to download and re-upload", url, file_path
                     
-                    http = httplib2.Http()
-                    response, content = http.request(url, "GET")
-                    print response
-                    response, content = omeka_client.post_file(uploadmeta, filename, content) 
-                    print response, content
+                    if file_path and os.path.exists(file_path):
+                        print "Already had that download:", file_path
+                        files.append(file_path)
+        
+                    else:
+                        filename = urlparse.urlsplit(url).path.split("/")[-1]
+                        new_path = os.path.join(data_dir, str(item[identifier_column]))
+                        if not os.path.exists(new_path):
+                            os.mkdirs(new_path)
+                        file_path = os.path.join(new_path, filename)
+                        http = httplib2.Http()
+                        response, content = http.request(url, "GET")
+                        print response
+                        open(file_path,'wb').write(content)
+                        mapping.add_downloaded_file(url, file_path)
+                        files.append(file_path)
+
                 for file in files:
                     print "Uploading", file
-                    
                     print omeka_client.post_file_from_filename(file, new_item_id )
 
                    
@@ -300,6 +328,7 @@ id_sheet = tablib.import_set(mapping.id_to_omeka_id)
 
 mapdata.append({'title': 'Omeka Mapping', 'data': mapping.supplied_element_names})
 mapdata.append({'title': 'ID Mapping', 'data': id_mapping})
+mapdata.append({'title': 'Downloads', 'data': mapping.downloads})
 
 new_book = tablib.Databook()
 new_book.yaml = yaml.dump(mapdata)
