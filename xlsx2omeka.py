@@ -3,7 +3,6 @@ import yaml
 import json
 import argparse
 from sys import stdin
-import sys
 import httplib2
 import os
 import urlparse
@@ -65,7 +64,7 @@ class XlsxMapping:
                 self.supplied_element_names = sheet['data']
                 for row in sheet['data']:
                     collection = row["Collection"]
-                    set = row["Omeka Element Set"]
+                    element_set = row["Omeka Element Set"]
                     column = row["Column"]
                     omeka_element = row["Omeka Element"]
                     if not "Linked" in row:
@@ -78,12 +77,12 @@ class XlsxMapping:
             
                     if row['Download'] <> None and collection <> None:
                         if not collection in self.download_fields:
-                           self.download_fields[collection] = {}
+                            self.download_fields[collection] = {}
                         self.download_fields[collection][column] = True
 
                     if row['File'] <> None and collection <> None:
                         if not collection in self.file_fields:
-                           self.file_fields[collection] = {}
+                            self.file_fields[collection] = {}
                         self.file_fields[collection][column] = True
                         
                     if row["Linked"] <> None and collection <> None:
@@ -100,7 +99,7 @@ class XlsxMapping:
                         if not collection in self.collection_field_mapping:
                             self.collection_field_mapping[collection] = {}
                        
-                        set_id = o_client.getSetId(set)
+                        set_id = o_client.getSetId(element_set)
                         element_id = o_client.getElementId(set_id,omeka_element)
     
                         self.collection_field_mapping[collection][column] = element_id
@@ -146,9 +145,9 @@ class XlsxMapping:
     def downloaded_file(self, url):
         return self.url_to_file[url] if url in self.url_to_file else None
     
-    def add_downloaded_file(self, url, file):
-        self.url_to_file['url'] = file
-        self.downloads.append({'url': url, 'file': file})
+    def add_downloaded_file(self, url, filename):
+        self.url_to_file['url'] = filename
+        self.downloads.append({'url': url, 'file': filename})
 
 #Get the main data
 databook = tablib.import_book(inputfile)
@@ -159,7 +158,7 @@ if os.path.exists(mapfile):
     previous_output = tablib.import_book(open(mapfile,"rb"))
     previous = yaml.load(previous_output.yaml)
 else:
-     previous = []
+    previous = []
 
 
 mapping = XlsxMapping(omeka_client, previous)
@@ -173,7 +172,7 @@ for d in data:
     print "Processing potential collection: ", collection_name
     collection_id = omeka_client.getCollectionId(collection_name, create=args['createcollections'])
     if collection_id <> None:
-       #Work out which fields can be automagically mapped
+        #Work out which fields can be automagically mapped
         if not collection_name in mapping.collection_field_mapping:
             print "No mapping data for this collection. Attempting to make one"
             mapping.collection_field_mapping[collection_name] = {}
@@ -273,8 +272,8 @@ for d in data:
               
                 #Looks like the ID wasn't actually there, so get it to mint a new one
                 if response['status'] == '404':
-                     print "retrying"
-                     response, content = omeka_client.post("items", jsonstr)
+                    print "retrying"
+                    response, content = omeka_client.post("items", jsonstr)
 
                 new_item = json.loads(content)
                 
@@ -296,7 +295,7 @@ for d in data:
                         filename = urlparse.urlsplit(url).path.split("/")[-1]
                         new_path = os.path.join(data_dir, str(item[identifier_column]))
                         if not os.path.exists(new_path):
-                            os.mkdirs(new_path)
+                            os.mkdir(new_path)
                         file_path = os.path.join(new_path, filename)
                         http = httplib2.Http()
                         response, content = http.request(url, "GET")
@@ -305,16 +304,16 @@ for d in data:
                         mapping.add_downloaded_file(url, file_path)
                         files.append(file_path)
 
-                for file in files:
-                    print "Uploading", file
-                    print omeka_client.post_file_from_filename(file, new_item_id )
+                for path in files:
+                    print "Uploading", path
+                    print omeka_client.post_file_from_filename(path, new_item_id )
 
                    
                 id_mapping.append({'Omeka ID': new_item_id, identifier_column: item[identifier_column], title_column: item[title_column]})
                 print "New ID", new_item_id
                 
                 for (property_id, object_id) in relations:
-                   omeka_client.addItemRelation(new_item_id, property_id, object_id) 
+                    omeka_client.addItemRelation(new_item_id, property_id, object_id) 
 
                 
                 
