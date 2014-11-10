@@ -29,7 +29,8 @@ class OmekaClient:
         self.sets = {} #Keep a dict of element sets keyed by name
         self.elements = {} #Dict of elements keyed by name then set-id
         self.collections = {} #Dict of collections keyed by Title
-
+        self.dublinCoreID = self.getSetId("Dublin Core")
+        self.omekaMetadataID = self.getSetId("Omeka Metadata")
         
         self.types = {} # Dict of item_types
         
@@ -41,7 +42,6 @@ class OmekaClient:
         response, content = self.get('item_relations', query=relation_data)
        
         res = json.loads(content)
-        print "relations search:" , res
         if len(res) == 0:
             response, content = self.post('item_relations', json.dumps(relation_data))
             print content;
@@ -93,6 +93,7 @@ class OmekaClient:
             if res <> [] or create:
                 if create and res == []: #TODO deal with t
                     response, content = self.post('elements', json.dumps({"name": name, "element_set" : {"id": set_id}}))
+                    print "Trying to make an element", response, content
                     el_data = json.loads(content)
                 else:
                     el_data = res[0]
@@ -107,7 +108,7 @@ class OmekaClient:
 
     def getCollectionId(self, name, create=False):
         """Find an Omeka collection by name and cache the results:
-           WARNING - does not deal with multiple pages of results or collections with the same Title"""
+           WARNING - does not yet deal with multiple pages of results or collections with the same Title"""
         def getTitle(collection):
             for t in collection['element_texts']:
                     if t['element']['name'] == 'Title':
@@ -119,12 +120,19 @@ class OmekaClient:
             for collection in collections_data:
                  getTitle(collection)
                  
-        if name in self.collections:   
-            return self.collections[name]["id"]
-        elif create:
-            response, content = self.post('collections', json.dumps({"name": name}))
+        
+        if create:
+            element_texts = []
+            title_id = self.getElementId(self.dublinCoreID, "Title")
+            element_text = {"html": False, "text": name} 
+            element_text["element"] = {"id": title_id }
+            
+            response, content = self.post('collections', json.dumps({"element_texts": [element_text]}))
             collection = json.loads(content)
-            return None
+            getTitle(collection)
+            
+        
+        return self.collections[name]["id"] if name in self.collections else None
     
     def get(self, resource, id=None, query={}):
         return self._request("GET", resource, id=id, query=query)

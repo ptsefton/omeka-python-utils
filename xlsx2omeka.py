@@ -1,3 +1,5 @@
+#!/usr/bin/python
+
 import tablib
 import yaml
 import json
@@ -18,15 +20,13 @@ parser.add_argument('inputfile', type=argparse.FileType('rb'),  default=stdin, h
 parser.add_argument('-k', '--key', default=None, help='Omeka API Key')
 parser.add_argument('-u', '--api_url',default=None, help='Omeka API Endpoint URL (hint, ends in /api)')
 parser.add_argument('-i', '--identifier', action='store_true',default="Identifier", help='Name of an Identifier column in the input spreadsheet. ')
-parser.add_argument('-d', '--download_cache', action='store_true',default="./data", help='Path to a directory in which to chache dowloads (defaults to ./data)')
+parser.add_argument('-d', '--download_cache', default="./data", help='Path to a directory in which to chache dowloads (defaults to ./data)')
 parser.add_argument('-t', '--title', action='store_true',default="Title", help='Name of a Title column in the input spreadsheet. ')
 parser.add_argument('-p', '--public', action='store_true', help='Make items public')
 parser.add_argument('-f', '--featured', action='store_true', help='Make items featured')
-parser.add_argument('-c', '--createcollections', action='store_true', help='Auto-create missing collections')
-parser.add_argument('-y', '--createtypes', action='store_true', help='Auto-create missing item types')
+parser.add_argument('-c', '--create_collections', action='store_true', help='Auto-create missing collections')
+parser.add_argument('-e', '--create_elements', action='store_true', help='Auto-create missing element types')
 args = vars(parser.parse_args())
-
-print args['createcollections']
 
 
 config = get_omeka_config()
@@ -160,7 +160,7 @@ if os.path.exists(mapfile):
     previous = yaml.load(previous_output.yaml)
 else:
      previous = []
-
+    
 
 mapping = XlsxMapping(omeka_client, previous)
 
@@ -171,27 +171,39 @@ id_mapping = []
 for d in data:
     collection_name =  d['title']
     print "Processing potential collection: ", collection_name
-    collection_id = omeka_client.getCollectionId(collection_name, create=args['createcollections'])
+    collection_id = omeka_client.getCollectionId(collection_name, create=args['create_collections'])
     if collection_id <> None:
        #Work out which fields can be automagically mapped
         if not collection_name in mapping.collection_field_mapping:
             print "No mapping data for this collection. Attempting to make one"
             mapping.collection_field_mapping[collection_name] = {}
-            for key in d['data'][0]:
-                for set_name in default_element_set_names:
-                    set_id = omeka_client.getSetId(set_name)
-                    element_id = omeka_client.getElementId(set_id, key)
-                    if element_id <> None and not key in mapping.collection_field_mapping[collection_name]:
-                        mapping.collection_field_mapping[collection_name][key] = element_id
-                        mapping.supplied_element_names.append({"Collection": collection_name,
-                                            "Column": key,
-                                            "Omeka Element Set": set_name,
-                                            "Omeka Element": key,
-                                            "Linked": "",
-                                            "Related": "",
-                                            "Download": "",
-                                             "File": ""})   
        
+        
+        def map_element(key, element_id, set_name):
+            mapping.collection_field_mapping[collection_name][key] = element_id
+            mapping.supplied_element_names.append({"Collection": collection_name,
+                            "Column": key,
+                            "Omeka Element Set": set_name,
+                            "Omeka Element": key,
+                            "Linked": "",
+                            "Related": "",
+                            "Download": "",
+                            "File": ""})
+            
+        for key in d['data'][0]:
+
+            for set_name in default_element_set_names:
+                set_id = omeka_client.getSetId(set_name)
+                element_id = omeka_client.getElementId(set_id, key)
+                if element_id <> None and not key in mapping.collection_field_mapping[collection_name]:
+                    map_element(key, element_id, set_name)
+                    
+            if args['create_elements'] and key <> "Omeka Type" and not key in mapping.collection_field_mapping[collection_name]:
+                set_name = 'Item Type Metadata'
+                set_id = omeka_client.getSetId(set_name)
+                element_id = omeka_client.getElementId(set_id, key, create=args['create_elements'])
+                map_element(key, element_id, set_name)
+    
         for item in d['data']:
             stuff_to_upload = False
             relations = []
@@ -200,8 +212,6 @@ for d in data:
             files = []
             for key,value in item.items():
                 (property_id, object_id) = mapping.item_relation(collection_name, key, value)
-
-
                 if value <> None:
                     if mapping.has_map(collection_name, key):
                         if  mapping.collection_field_mapping[collection_name][key] <> None:
@@ -215,7 +225,6 @@ for d in data:
                         if mapping.is_file(collection_name, key):
                             print "Need to map"
                             files.append(value)
-                            
                         if mapping.is_linked_field(collection_name, key, value):
                             #TODO - deal with muliple values
                             to_title =  mapping.id_to_title[value]
@@ -239,7 +248,7 @@ for d in data:
 
                         element_texts.append(element_text)
                        
-                    elif key == "Omeka Type":
+                    if key == "Omeka Type":
                         item_type_id = omeka_client.getItemTypeId(value)
                         if item_type_id <> None:
                             stuff_to_upload = True
@@ -259,7 +268,7 @@ for d in data:
                 item_to_upload = {"collection": {"id": collection_id}, "item_type": {"id":item_type_id}, "featured": args["featured"], "public": args["public"]}
                 item_to_upload["element_texts"] = element_texts
                 jsonstr = json.dumps(item_to_upload)
-                # Find ID
+              
                 previous_id = None
                 if identifier_column in item and item[identifier_column] in mapping.id_to_omeka_id:
                     previous_id = mapping.id_to_omeka_id[item[identifier_column]]
@@ -267,7 +276,7 @@ for d in data:
                 if previous_id <> None:
                     print "Re-uploading ", previous_id
                     response, content = omeka_client.put("items" , previous_id, jsonstr)
-                
+                    
                 else:
                     response, content = omeka_client.post("items", jsonstr)
               
@@ -285,30 +294,46 @@ for d in data:
                     print item_to_upload, response, content
                     
                 for url in URLs:
+                    http = httplib2.Http()
                     file_path = mapping.downloaded_file(url)
-                    print "Found something to download and re-upload", url, file_path
+                    download_this = True
                     
-                    if file_path and os.path.exists(file_path):
-                        print "Already had that download:", file_path
-                        files.append(file_path)
-        
-                    else:
+                    print "Found something to download and re-upload", url
+                    
+                    if file_path == None or file_path == "None": #Previous bug put "None" in spreadsheet
                         filename = urlparse.urlsplit(url).path.split("/")[-1]
                         new_path = os.path.join(data_dir, str(item[identifier_column]))
                         if not os.path.exists(new_path):
-                            os.mkdirs(new_path)
+                            os.makedirs(new_path)
                         file_path = os.path.join(new_path, filename)
-                        http = httplib2.Http()
-                        response, content = http.request(url, "GET")
-                        print response
-                        open(file_path,'wb').write(content)
-                        mapping.add_downloaded_file(url, file_path)
-                        files.append(file_path)
-
+                    print "Local filename:", file_path
+                    
+                    #Check if we have one the same size already
+                    if os.path.exists(file_path):
+                        response, content = http.request(url, "HEAD")
+                        download_size = int(response['content-length']) if 'content-length' in response else -1
+                        file_size = size = os.path.getsize(file_path)
+                        if download_size == file_size:
+                            print "Already have a download of the same size: ", file_size
+                            download_this = False
+                        
+                    if download_this:
+                        try:
+                            response, content = http.request(url, "GET")
+                            open(file_path,'wb').write(content)
+                            print response
+                        except:
+                            print "Some kind of download error happened - pressing on"
+                    
+                    files.append(file_path)
+                    mapping.add_downloaded_file(url, file_path)
+                    
                 for file in files:
                     print "Uploading", file
-                    print omeka_client.post_file_from_filename(file, new_item_id )
-
+                    try:
+                        print omeka_client.post_file_from_filename(file, new_item_id )
+                    except:
+                        print "Some kind of error happened uploading - pressing on"
                    
                 id_mapping.append({'Omeka ID': new_item_id, identifier_column: item[identifier_column], title_column: item[title_column]})
                 print "New ID", new_item_id
