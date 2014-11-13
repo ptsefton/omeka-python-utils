@@ -3,6 +3,7 @@ import urllib
 import mimetypes
 import json
 import os
+import re
 
 
 class OmekaItem:
@@ -136,6 +137,7 @@ class OmekaClient:
     
     def get(self, resource, id=None, query={}):
         return self._request("GET", resource, id=id, query=query)
+        
     
     def post(self, resource, data, query={}, headers={}):
         return self._request("POST", resource, data=data, query=query, headers=headers)
@@ -200,4 +202,20 @@ class OmekaClient:
             query["key"] = self._key
         url += "?" + urllib.urlencode(query)
         resp, content = self._http.request(url, method, body=data, headers=headers)
+        
+        links = resp['link'] if 'link' in resp else ""
+        for link in links.split(", "):
+            l = link.split("; ")
+            if l[-1] == 'rel="next"':
+                pages = re.findall(r'\Wpage=(\d+)', l[0])
+                per_pages = re.findall(r'\Wper_page=(\d+)', l[0])
+                page = int(pages[0]) if len(pages) > 0 else None
+                per_page = int(per_pages[0]) if len(per_pages) > 0 else None
+
+                if page and per_page:
+                    query['page'] = page
+                    query['per_page'] = per_page
+                    resp, cont = self._request(method, resource, id, data, query, headers)
+                    content = json.dumps(json.loads(content) + json.loads(cont))
+        #Returns strings - this is not ideal but to fix would require a breaking change
         return resp, content
