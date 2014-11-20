@@ -122,7 +122,7 @@ class OmekaClient:
                  getTitle(collection)
                  
         
-        if create:
+        if not name in self.collections and create:
             element_texts = []
             title_id = self.getElementId(self.dublinCoreID, "Title")
             element_text = {"html": False, "text": name} 
