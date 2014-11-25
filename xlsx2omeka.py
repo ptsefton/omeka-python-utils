@@ -331,7 +331,7 @@ for d in data:
                             
                         else:
                             try: # Have had some encoding problems - not sure if this is still needed
-                                element_text["text"] = value
+                                element_text["text"] = str(value)
                                 
                             except:
                                 print "ERROR - failed to add", value
