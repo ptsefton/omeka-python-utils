@@ -10,8 +10,31 @@ import os
 import urlparse
 from omekaclient import OmekaClient
 from omekautils import get_omeka_config
+import logging
+
+
+def setup_logging(name="xlsx2omeka"):
+    # Create a logger
+    logger = logging.getLogger(name)
+    logger.setLevel(logging.INFO)
+    
+    # Create a console handler
+    handler = logging.StreamHandler()
+    handler.setLevel(logging.INFO)
+    
+    # Create a formatter and add to the handler
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    handler.setFormatter(formatter)
+    
+    # Add the handler to the logger
+    logger.addHandler(handler)
+    return logger
+# end setup_logging(name="xlsx2omeka")
+
 
 """ Uploads an entire spreadsheet to an Omeka server """
+
+logger = setup_logging()
 
 # Define and parse command-line arguments
 parser = argparse.ArgumentParser()
@@ -52,7 +75,7 @@ def download_and_upload(new_item_id, original_id, URLs, files):
         file_path = mapping.downloaded_file(url)
         download_this = True
 
-        print "Found something to download and re-upload", url
+        logger.info("Found something to download and re-upload %s", url)
 
         if file_path == None or file_path == "None": #Previous bug put "None" in spreadsheet
             filename = urlparse.urlsplit(url).path.split("/")[-1]
@@ -60,7 +83,7 @@ def download_and_upload(new_item_id, original_id, URLs, files):
             if not os.path.exists(new_path):
                 os.makedirs(new_path)
             file_path = os.path.join(new_path, filename)
-        print "Local filename:", file_path
+        logger.info("Local filename: %s", file_path)
 
         #Check if we have one the same size already
         if os.path.exists(file_path):
@@ -68,26 +91,26 @@ def download_and_upload(new_item_id, original_id, URLs, files):
             download_size = int(response['content-length']) if 'content-length' in response else -1
             file_size = size = os.path.getsize(file_path)
             if download_size == file_size:
-                print "Already have a download of the same size: ", file_size
+                logger.info("Already have a download of the same size: %d", file_size)
                 download_this = False
 
         if download_this:
             try:
                 response, content = http.request(url, "GET")
                 open(file_path,'wb').write(content)
-                print response
+                logger.info(response)
             except:
-                print "Some kind of download error happened - pressing on"
+                logger.warning("Some kind of download error happened - pressing on")
 
         files.append(file_path)
         mapping.add_downloaded_file(url, file_path)
 
     for file in files:
-        print "Uploading", file
+        logger.info("Uploading %s", file)
         try:
             omeka_client.post_file_from_filename(file, new_item_id )
         except:
-            print "Some kind of error happened uploading - pressing on"
+            logger.warning("Some kind of error happened uploading - pressing on")
 
 def upload(previous_id, original_id, jsonstr, title, URLs, files, iterations):
     #If we're uploading
@@ -96,7 +119,7 @@ def upload(previous_id, original_id, jsonstr, title, URLs, files, iterations):
         
     for iteration in range(0, iterations):
         if previous_id <> None:
-            print "Re-uploading ", previous_id,
+            logger.info("Re-uploading %s", previous_id)
             response, content = omeka_client.put("items" , previous_id, jsonstr)
 
         else:
@@ -104,7 +127,7 @@ def upload(previous_id, original_id, jsonstr, title, URLs, files, iterations):
 
         #Looks like the ID wasn't actually there, so get it to mint a new one
         if response['status'] == '404':
-            print "retrying",
+            logger.info("retrying")
             response, content = omeka_client.post("items", jsonstr)
 
         new_item = json.loads(content)
@@ -114,15 +137,14 @@ def upload(previous_id, original_id, jsonstr, title, URLs, files, iterations):
             if iterations == 1:
                 id_mapping.append({'Omeka ID': new_item_id, identifier_column: original_id, title_column: title})
             
-            print "New ID", new_item_id
+            logger.info("New ID %s", new_item_id)
             
             for (property_id, object_id) in relations:
                 omeka_client.addItemRelation(new_item_id, property_id, object_id)
 
             download_and_upload(new_item_id, original_id, URLs, files)
         except:
-            print '********* FAILED TO UPLOAD'
-            print item_to_upload, response, content
+            logger.error('********* FAILED TO UPLOAD: \n%s\n%s\n%s', item_to_upload, response, content)
 
 
 
