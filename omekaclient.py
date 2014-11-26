@@ -22,7 +22,7 @@ class OmekaCollection:
         
 class OmekaClient:
     
-    def __init__(self, endpoint, key=None):
+    def __init__(self, endpoint, logger, key=None):
         self._endpoint = endpoint
         
         self._key = key
@@ -32,6 +32,7 @@ class OmekaClient:
         self.collections = {} #Dict of collections keyed by Title
         self.dublinCoreID = self.getSetId("Dublin Core")
         self.omekaMetadataID = self.getSetId("Omeka Metadata")
+        self.logger = logger
         
         self.types = {} # Dict of item_types
         
@@ -45,9 +46,9 @@ class OmekaClient:
         res = json.loads(content)
         if len(res) == 0:
             response, content = self.post('item_relations', json.dumps(relation_data))
-            print content;
+            self.logger.info("Response = %s, content = %s", response, content);
         else:
-            print "Already related"
+            self.logger.info("Already related")
 
     def getItemTypeId(self, name, create=False):
         """Find get item_type by ID by name and cache the results:
@@ -83,7 +84,7 @@ class OmekaClient:
                     set_data = res[0]
                 self.sets[name]  = set_data
             else:
-                 return None
+                return None
         return self.sets[name]["id"]
 
     def getElementId(self, set_id, name, create=False):
@@ -94,7 +95,7 @@ class OmekaClient:
             if res <> [] or create:
                 if create and res == []: #TODO deal with t
                     response, content = self.post('elements', json.dumps({"name": name, "element_set" : {"id": set_id}}))
-                    print "Trying to make an element", response, content
+                    self.logger.info("Trying to make an element %s %s", response, content)
                     el_data = json.loads(content)
                 else:
                     el_data = res[0]
@@ -119,11 +120,10 @@ class OmekaClient:
             response, content = self.get('collections')
             collections_data = json.loads(content)
             for collection in collections_data:
-                 getTitle(collection)
+                getTitle(collection)
                  
         
         if not name in self.collections and create:
-            element_texts = []
             title_id = self.getElementId(self.dublinCoreID, "Title")
             element_text = {"html": False, "text": name} 
             element_text["element"] = {"id": title_id }
@@ -153,7 +153,7 @@ class OmekaClient:
             
             for attachment in attachments:
                 if attachment["size"] == size and attachment["original_filename"] == filename:
-                    print "********** There is already a %s byte file named %s, not uploading *******" % (str(size),filename)
+                    self.logger.warning("********** There is already a %d byte file named %s, not uploading *******", size,filename)
                     upload_this = False
             if upload_this:
                 uploadjson = {"item": {"id": id}}
@@ -162,7 +162,8 @@ class OmekaClient:
                 content = open(file, "rb").read()
                 return self.post_file(uploadmeta, filename, content) 
         else:
-            print "File not found", file
+            self.error("File %s not found", file)
+            
     def put(self, resource, id, data, query={}):
         return self._request("PUT", resource, id, data=data, query=query)
     

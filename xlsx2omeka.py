@@ -54,7 +54,7 @@ args = vars(parser.parse_args())
 config = get_omeka_config()
 endpoint = args['api_url'] if args['api_url'] <> None else config['api_url']
 apikey   = args['key'] if args['api_url'] <> None else config['key']
-omeka_client = OmekaClient(endpoint.encode("utf-8"), apikey)
+omeka_client = OmekaClient(endpoint.encode("utf-8"), logger, apikey)
 inputfile = args['inputfile']
 identifier_column = args['identifier']
 title_column = args['title']
@@ -65,8 +65,6 @@ data_dir = args['download_cache']
 #TODO make the 'bespoke' one configurable
 default_element_set_names = ['Dublin Core','Item Type Metadata', 'Bespoke Metadata']
 
-
-omeka_client = OmekaClient(endpoint.encode("utf-8"), apikey)
 
 def download_and_upload(new_item_id, original_id, URLs, files):
     """Handle any dowloads, cache as files, then upload all files"""
@@ -89,7 +87,7 @@ def download_and_upload(new_item_id, original_id, URLs, files):
         if os.path.exists(file_path):
             response, content = http.request(url, "HEAD")
             download_size = int(response['content-length']) if 'content-length' in response else -1
-            file_size = size = os.path.getsize(file_path)
+            file_size = os.path.getsize(file_path)
             if download_size == file_size:
                 logger.info("Already have a download of the same size: %d", file_size)
                 download_this = False
@@ -105,10 +103,10 @@ def download_and_upload(new_item_id, original_id, URLs, files):
         files.append(file_path)
         mapping.add_downloaded_file(url, file_path)
 
-    for file in files:
-        logger.info("Uploading %s", file)
+    for fyle in files:
+        logger.info("Uploading %s", fyle)
         try:
-            omeka_client.post_file_from_filename(file, new_item_id )
+            omeka_client.post_file_from_filename(fyle, new_item_id )
         except:
             logger.warning("Some kind of error happened uploading - pressing on")
 
@@ -121,8 +119,8 @@ def upload(previous_id, original_id, jsonstr, title, URLs, files, iterations):
         if previous_id <> None:
             logger.info("Re-uploading %s", previous_id)
             response, content = omeka_client.put("items" , previous_id, jsonstr)
-
         else:
+            logger.info("Uploading new version, iteration %d", iteration)
             response, content = omeka_client.post("items", jsonstr)
 
         #Looks like the ID wasn't actually there, so get it to mint a new one
@@ -274,8 +272,7 @@ if os.path.exists(mapfile):
     previous_output = tablib.import_book(open(mapfile,"rb"))
     previous = yaml.load(previous_output.yaml)
 else:
-
-     previous = []    
+    previous = []    
 
 mapping = XlsxMapping(omeka_client, previous)
 
@@ -283,13 +280,13 @@ mapping = XlsxMapping(omeka_client, previous)
 id_mapping = []
 for d in data:
     collection_name =  d['title']
-    print "Processing potential collection: ", collection_name
+    logger.info("Processing potential collection: %s", collection_name)
     iterations = mapping.upload_collection_multiple_times(collection_name)
     collection_id = omeka_client.getCollectionId(collection_name, create=args['create_collections'])
     if collection_id <> None:
         #Work out which fields can be automagically mapped
         if not collection_name in mapping.collection_field_mapping:
-            print "No mapping data for this collection. Attempting to make one"
+            logger.info("No mapping data for this collection. Attempting to make one")
             mapping.collection_field_mapping[collection_name] = {}
             
       
@@ -345,9 +342,9 @@ for d in data:
                                 to_title =  mapping.id_to_omeka_id[value]
                             element_text["text"] = "<a href='/items/show/%s'>%s</a>" % (mapping.id_to_omeka_id[value], to_title)
                             element_text["html"] = True
-                            print "Uploading HTML", key, value, element_text["text"]
+                            logger.info("Uploading HTML %s, %s, %s", key, value, element_text["text"])
                         elif property_id <> None:
-                            print "Relating this item to another"
+                            logger.info("Relating this item to another")
                             relations.append((property_id, object_id))
                             #TODO check for existing relation
                             
@@ -356,7 +353,7 @@ for d in data:
                                 element_text["text"] = str(value)
                                 
                             except:
-                                print "ERROR - failed to add", value
+                                logger.error("failed to add", value)
 
                         element_texts.append(element_text)
                        
@@ -367,14 +364,14 @@ for d in data:
                         
                     else:
                         pass #TODO - log failure to upload
-                        #print 'Warning, not uploaded ', collection, key, value
+                        #logger.warning('not uploaded %s, %s, %s', collection, key, value)
                     
                 else:
                     item[key] = ""
                     
             if not(identifier_column) in item:
                 stuff_to_upload = False
-                print "No identifier (%s) in table" % identifier_column
+                logger.info("No identifier (%s) in table", identifier_column)
                 
             if stuff_to_upload:
                 item_to_upload = {"collection": {"id": collection_id}, "item_type": {"id":item_type_id}, "featured": args["featured"], "public": args["public"]}
