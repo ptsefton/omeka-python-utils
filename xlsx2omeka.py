@@ -407,4 +407,4 @@ new_book.yaml = yaml.dump(mapdata)
 
 with open(mapfile,"wb") as f:
     f.write(new_book.xlsx)
-
+logger.info("Finished")
