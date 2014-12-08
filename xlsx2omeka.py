@@ -107,6 +107,7 @@ def download_and_upload(new_item_id, original_id, URLs, files):
         logger.info("Uploading %s", fyle)
         try:
             omeka_client.post_file_from_filename(fyle, new_item_id )
+            logger.info("Uploaded %s", fyle)
         except:
             logger.warning("Some kind of error happened uploading - pressing on")
 
