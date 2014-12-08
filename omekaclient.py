@@ -158,8 +158,9 @@ class OmekaClient:
             if upload_this:
                 uploadjson = {"item": {"id": id}}
                 uploadmeta = json.dumps(uploadjson)
-                http = httplib2.Http()
-                content = open(file, "rb").read()
+                with open(file) as f:
+                    content = f.read()
+                    f.close()
                 return self.post_file(uploadmeta, filename, content) 
         else:
             self.error("File %s not found", file)
