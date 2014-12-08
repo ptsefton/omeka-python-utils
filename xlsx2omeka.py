@@ -2,39 +2,21 @@
 
 import tablib
 import yaml
-import json
 import argparse
 from sys import stdin
+from sys import stdout
 import httplib2
 import os
 import urlparse
 from omekaclient import OmekaClient
 from omekautils import get_omeka_config
-import logging
+from omekautils import create_stream_logger
 
-
-def setup_logging(name="xlsx2omeka"):
-    # Create a logger
-    logger = logging.getLogger(name)
-    logger.setLevel(logging.INFO)
-    
-    # Create a console handler
-    handler = logging.StreamHandler()
-    handler.setLevel(logging.INFO)
-    
-    # Create a formatter and add to the handler
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    handler.setFormatter(formatter)
-    
-    # Add the handler to the logger
-    logger.addHandler(handler)
-    return logger
-# end setup_logging(name="xlsx2omeka")
 
 
 """ Uploads an entire spreadsheet to an Omeka server """
 
-logger = setup_logging()
+logger = create_stream_logger('xlxx2omeka', stdout)
 
 # Define and parse command-line arguments
 parser = argparse.ArgumentParser()
