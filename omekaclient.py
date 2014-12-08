@@ -4,6 +4,7 @@ import mimetypes
 import json
 import os
 import re
+from omekautils import create_null_logger
 
 
 class OmekaItem:
@@ -22,7 +23,7 @@ class OmekaCollection:
         
 class OmekaClient:
     
-    def __init__(self, endpoint, logger, key=None):
+    def __init__(self, endpoint, logger=None, key=None):
         self._endpoint = endpoint
         
         self._key = key
@@ -32,7 +33,10 @@ class OmekaClient:
         self.collections = {} #Dict of collections keyed by Title
         self.dublinCoreID = self.getSetId("Dublin Core")
         self.omekaMetadataID = self.getSetId("Omeka Metadata")
-        self.logger = logger
+        if logger is None:
+            self.logger = create_null_logger("OmekaClient")
+        else:
+            self.logger = logger
         
         self.types = {} # Dict of item_types
         
