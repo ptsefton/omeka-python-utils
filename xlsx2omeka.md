@@ -1,12 +1,15 @@
 # What is this?
 
-This is a work-in-progress script to upload a spreadsheet of data with one or more worksheets to one or more Omeka collections.
+This is a work-in-progress script to upload an excel spreadsheet (.xlsx) of data with one or more worksheets to one or more Omeka collections. To structure your spreadsheet:
 
-Some quick notes, to be turned into a how-to later.
+* Name each worksheet/tab with the name of a collection to which you want to upload (tip: use the -c flag to force collections to be auto-created).
+* For each worksheet:
+  * Make sure there is an "Identifier" column containing an ID which is unique to the whole workbook (tip: use sequential integers using auto-fill but make sure not to reuse) (tip: pass the name of a diferent Identifier column using -i)
+  * Make sure there is a column "Omeka Type" with the name of an existing Item Type for every data row (tip: these can not be auto-created at this stage, so create it manually in the admin interface if needed)
 
-usage
+For usage, type:
 
-python xlsx2omeka.py input-file.xlsx -i Identifier -t Title
+    python xlsx2omeka.py input-file.xlsx -h
 
 * Put the adress of the server and your API key in ~/.omeka.config, e.g.:
 ```
