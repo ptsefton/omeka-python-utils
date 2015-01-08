@@ -1,5 +1,5 @@
 #!/usr/bin/python
-
+import json
 import tablib
 import yaml
 import argparse
@@ -30,6 +30,8 @@ parser.add_argument('-p', '--public', action='store_true', help='Make items publ
 parser.add_argument('-f', '--featured', action='store_true', help='Make items featured')
 parser.add_argument('-c', '--create_collections', action='store_true', help='Auto-create missing collections')
 parser.add_argument('-e', '--create_elements', action='store_true', help='Auto-create missing element types')
+parser.add_argument('-y', '--create_item_types', action='store_true', help='Auto-create missing Item Types')
+parser.add_argument('-q', '--quietly', action='store_true', help='Only log errors and warnings not the constant stream of info')
 args = vars(parser.parse_args())
 
 
@@ -41,6 +43,8 @@ inputfile = args['inputfile']
 identifier_column = args['identifier']
 title_column = args['title']
 data_dir = args['download_cache']
+if args["quietly"]:
+    logger.setLevel(30)
 
 
 #Auto-map to elements from these sets
@@ -48,7 +52,7 @@ data_dir = args['download_cache']
 default_element_set_names = ['Dublin Core','Item Type Metadata', 'Bespoke Metadata']
 
 
-def download_and_upload(new_item_id, original_id, URLs, files):
+def download_and_upload_files(new_item_id, original_id, URLs, files):
     """Handle any dowloads, cache as files, then upload all files"""
     for url in URLs:
         http = httplib2.Http()
@@ -80,21 +84,22 @@ def download_and_upload(new_item_id, original_id, URLs, files):
                 open(file_path,'wb').write(content)
                 logger.info(response)
             except:
-                logger.warning("Some kind of download error happened - pressing on")
+                logger.warning("Some kind of download error happened fetching %s - pressing on" % url)
 
         files.append(file_path)
         mapping.add_downloaded_file(url, file_path)
 
     for fyle in files:
-        logger.info("Uploading %s", fyle)
+        logger.warning("Uploading %s", fyle)
         try:
-            omeka_client.post_file_from_filename(fyle, new_item_id )
+            print omeka_client.post_file_from_filename(fyle, new_item_id )
+            
             logger.info("Uploaded %s", fyle)
         except:
-            logger.warning("Some kind of error happened uploading - pressing on")
+            logger.warning("Some kind of error happened uploading %s - pressing on" % fyle)
 
 def upload(previous_id, original_id, jsonstr, title, URLs, files, iterations):
-    #If we're uploading
+    #TODO - get rid of the global mapping variable 
     if iterations > 1:
         previous_id = None
         
@@ -116,14 +121,14 @@ def upload(previous_id, original_id, jsonstr, title, URLs, files, iterations):
         try:
             new_item_id = new_item['id']
             if iterations == 1:
-                id_mapping.append({'Omeka ID': new_item_id, identifier_column: original_id, title_column: title})
+                id_mapping.append({'Omeka ID': new_item_id, identifier_column: original_id, "Title": title})
             
             logger.info("New ID %s", new_item_id)
             
             for (property_id, object_id) in relations:
                 omeka_client.addItemRelation(new_item_id, property_id, object_id)
 
-            download_and_upload(new_item_id, original_id, URLs, files)
+            download_and_upload_files(new_item_id, original_id, URLs, files)
         except:
             logger.error('********* FAILED TO UPLOAD: \n%s\n%s\n%s', item_to_upload, response, content)
 
@@ -183,7 +188,12 @@ class XlsxMapping:
                     if row["Related"] <> None and collection <> None:
                         if not collection in self.related_fields:
                             self.related_fields[collection] = {}
-                        self.related_fields[collection][column] = row["Related"]
+                        relation = row["Related"]
+                        relation_id = None
+                        if ":" in str(relation):
+                            prefix, label = relation.split(":")
+                            relation_id = omeka_client.getRelationPropertyId(prefix,label)
+                            self.related_fields[collection][column] = relation_id
                         
                     if omeka_element <> None and column <> None and collection <> None:
                         if not collection in self.collection_field_mapping:
@@ -308,46 +318,41 @@ for d in data:
             for key,value in item.items():
                 (property_id, object_id) = mapping.item_relation(collection_name, key, value)
                 if value <> None:
-                    if mapping.has_map(collection_name, key):
-                        if  mapping.collection_field_mapping[collection_name][key] <> None:
-                            element_text = {"html": False, "text": "none"} #, "element_set": {"id": 0}}
-                            element_text["element"] = {"id": mapping.collection_field_mapping[collection_name][key] }
-                        else:
-                            element_text = {}
-                        if mapping.to_download(collection_name, key):
-                            URLs.append(value)
-                        if mapping.is_file(collection_name, key):
-                            files.append(value)
-                        if mapping.is_linked_field(collection_name, key, value):
-                            #TODO - deal with muliple values
-                            to_title =  mapping.id_to_title[value]
-                            if to_title == None:
-                                to_title =  mapping.id_to_omeka_id[value]
-                            element_text["text"] = "<a href='/items/show/%s'>%s</a>" % (mapping.id_to_omeka_id[value], to_title)
-                            element_text["html"] = True
-                            logger.info("Uploading HTML %s, %s, %s", key, value, element_text["text"])
-                        elif property_id <> None:
-                            logger.info("Relating this item to another")
-                            relations.append((property_id, object_id))
-                            #TODO check for existing relation
-                            
-                        else:
-                            try: # Have had some encoding problems - not sure if this is still needed
-                                element_text["text"] = str(value)
-                                
-                            except:
-                                logger.error("failed to add", value)
-
-                        element_texts.append(element_text)
-                       
                     if key == "Omeka Type":
-                        item_type_id = omeka_client.getItemTypeId(value)
+                        item_type_id = omeka_client.getItemTypeId(value, create=args['create_item_types'])
                         if item_type_id <> None:
                             stuff_to_upload = True
-                        
                     else:
-                        pass #TODO - log failure to upload
-                        #logger.warning('not uploaded %s, %s, %s', collection, key, value)
+                        if mapping.has_map(collection_name, key):
+                            if  mapping.collection_field_mapping[collection_name][key] <> None:
+                                element_text = {"html": False, "text": "none"} #, "element_set": {"id": 0}}
+                                element_text["element"] = {"id": mapping.collection_field_mapping[collection_name][key] }
+                            else:
+                                element_text = {}
+                            if mapping.to_download(collection_name, key):
+                                URLs.append(value)
+                            if mapping.is_file(collection_name, key):
+                                print data_dir, value
+                                files.append(os.path.join(data_dir,value))
+                            if mapping.is_linked_field(collection_name, key, value):
+                                #TODO - deal with muliple values
+                                to_title =  mapping.id_to_title[value]
+                                if to_title == None:
+                                    to_title =  mapping.id_to_omeka_id[value]
+                                element_text["text"] = "<a href='/items/show/%s'>%s</a>" % (mapping.id_to_omeka_id[value], to_title)
+                                element_text["html"] = True
+                                logger.info("Uploading HTML %s, %s, %s", key, value, element_text["text"])
+                            elif property_id <> None:
+                                logger.info("Relating this item to another")
+                                relations.append((property_id, object_id))
+                            else:
+                                try: # Have had some encoding problems - not sure if this is still needed
+                                    element_text["text"] = unicode(value)
+
+                                except:
+                                    logger.error("failed to add this string \n********\n %s \n*********\n" % value)
+
+                            element_texts.append(element_text)
                     
                 else:
                     item[key] = ""
@@ -362,7 +367,7 @@ for d in data:
                 jsonstr = json.dumps(item_to_upload)
                 previous_id = None
                 original_id = item[identifier_column]
-                title = item[title_column]
+                title = item[title_column] if title_column in item else "Untitled"
                 if identifier_column in item and original_id in mapping.id_to_omeka_id:
                     previous_id = mapping.id_to_omeka_id[original_id]
 

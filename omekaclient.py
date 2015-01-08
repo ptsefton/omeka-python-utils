@@ -31,6 +31,8 @@ class OmekaClient:
         self.sets = {} #Keep a dict of element sets keyed by name
         self.elements = {} #Dict of elements keyed by name then set-id
         self.collections = {} #Dict of collections keyed by Title
+        self.vocabs = {} #Dict of vocabularies keyed by namespace prefix
+        self.relation_properties = {} # Dict of Item Relations Properties keyed by vocab id, then name
         self.dublinCoreID = self.getSetId("Dublin Core")
         self.omekaMetadataID = self.getSetId("Omeka Metadata")
         if logger is None:
@@ -55,9 +57,7 @@ class OmekaClient:
             self.logger.info("Already related")
 
     def getItemTypeId(self, name, create=False):
-        """Find get item_type by ID by name and cache the results:
-           WARNING - does not deal with multiple pages of results or collections with the same Title"""
-        
+        """Find item_type ID by name and cache the results:"""
         if name in self.types:   
             return self.types[name]["id"]
         else:
@@ -67,13 +67,41 @@ class OmekaClient:
                 self.types[name] = types_data[0]
                 return types_data[0]["id"]
             elif create:
-                response, content = self.post('item_types', query={"name":name})
+                self.logger.info("Item type %s not found, attempting to make one" % name)
+                response, content = self.post('item_types',  json.dumps({"name": name}))
                 types_data = json.loads(content)
-                self.types[name] = types_data[0]
-                return types_data[0]["id"]
+                print types_data
+                self.types[name] = types_data
+               
+                return types_data["id"]
             else:
                 return None
             
+    def getVocabularyId(self, name):
+        """Find an the ID of a vocabulary using its prefix (eg dcterms)"""
+        if not name in self.vocabs:
+            response, content = self.get('item_relations_vocabularies', query={"namespace_prefix": name})
+            res = json.loads(content)
+            if res <> []:
+                self.vocabs[name]  = res[0]
+            else:
+                return None
+        return self.vocabs[name]["id"]
+
+    def getRelationPropertyId(self, prefix, label):
+        """Find an the ID of a vocabulary using its prefix (eg dcterms)"""
+        vocab_id = self.getVocabularyId(prefix)
+        if vocab_id <> None:
+            if not vocab_id in self.relation_properties:
+                self.relation_properties[vocab_id] = {}
+            if not label in  self.relation_properties[vocab_id]:
+                response, content = self.get('item_relations_properties', query={"label": label, "vocabulary_id": vocab_id})
+                res = json.loads(content)
+                if res <> []:
+                    self.relation_properties[vocab_id][label]  = res[0]
+                else:
+                    return None
+            return  self.relation_properties[vocab_id][label]["id"]       
 
     def getSetId(self, name, create=False):
         """Find an Omeka element_set by name and cache the results"""
@@ -113,8 +141,7 @@ class OmekaClient:
             return None
 
     def getCollectionId(self, name, create=False):
-        """Find an Omeka collection by name and cache the results:
-           WARNING - does not yet deal with multiple pages of results or collections with the same Title"""
+        """Find an Omeka collection by name and cache the results. Does not deal with collections with the same title"""
         def getTitle(collection):
             for t in collection['element_texts']:
                     if t['element']['name'] == 'Title':
