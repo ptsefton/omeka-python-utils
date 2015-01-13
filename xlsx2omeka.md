@@ -34,6 +34,7 @@ To get set up:
 ```
 
 * Or pass these detail on the commandline using the -u (URL) and -k (Key) flags (examples below will assume the .omeka.config file exists.
+
 ## Set up a spreadsheet
 
 To structure your spreadsheet:
@@ -56,6 +57,7 @@ At the end of the first run, the script will create a new spreadsheet with data 
 *  `Multiple Uploads` A sheet that allows you to specify that a particular collection should be uploaded multiple time, for testing purposes. TODO: Document this. **Only touch this if you are stress-testing Omeka**
 
 ## Configure file uploads and item-relations
+
 To add files:
 * To upload files from the file system, in the `Omeka Mapping` sheet of the mapping spreadsheet, put `yes` in the `File` column for the field in question.
 * To upload files via a URL, in the `Omeka Mapping` sheet of the mapping spreadsheet, put `yes` in the `Download` column for the field in question.
@@ -71,6 +73,12 @@ To relate items to each other:
 | Omeka Element | Column   | Collection | Omeka Element Set | Related         |
 | Creator       | Creator  | Books      | Dublin Core       | dcterms:Creator |
 ```
+## Second or subsequent runs
+Once you have made changes to the mapping spreadsheet, subsequent runs should over-write the items created in previous runs, as long as you don't delete items from Omeka, or remove data from the `ID Mapping` sheet.
+
+* Save and close the mapping spreadsheet if you have made any changes
+* Re run the script.
+
 ## Add or change metadata mapping
 
 
@@ -83,11 +91,11 @@ Check that for each row.
 * There is an Omeka Type and the Omeka Type exists as an Item Type in your Omeka isntances (or use the `-y` flag to auto-create)
 
 ## Some items are coming through without a title but there is a `Title` column in my spreadsheet.
-Check that there is no space before or after Title in the column-header - sometimes spurious spaces seem to be created by Excel when importing CSV files.
+Check that there is no space before or after Title in the column-header - sometimes spurious spaces get created by Excel when importing CSV files.
 
 ## Some files won't upload
 
-Check the Omeka confiuration allows upload of that file type, and check that the file is within the upload limits you configured on the server (above).
+Check the Omeka confiuration allows upload of that file type, and check that the file is within the upload limits you configured on the server see above.
 
 
 
