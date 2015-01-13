@@ -59,8 +59,11 @@ At the end of the first run, the script will create a new spreadsheet with data 
 ## Configure file uploads and item-relations
 
 To add files:
-* To upload files from the file system, in the `Omeka Mapping` sheet of the mapping spreadsheet, put `yes` in the `File` column for the field in question.
+* To upload files from the file system, in the `Omeka Mapping` sheet of the mapping spreadsheet:
+  * put `yes` in the `File` column for the column in question
+  * Make sure that the the paths to the files are either absolute (starting with /) or relative to the data directory, by default this is ./data (relative to where you're running the script) but you can change this by passing a data directory using -d.
 * To upload files via a URL, in the `Omeka Mapping` sheet of the mapping spreadsheet, put `yes` in the `Download` column for the field in question.
+  The script will cache downloaded files in the data directory and only re-upload to the server if there is a size difference between the size reported by the server from where the files are being downloaed and the cached copy.
 
 To relate items to each other:
 *   Make sure the spreadsheet you are using has relations whithin it.
