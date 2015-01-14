@@ -1,6 +1,6 @@
 # About
 
-This is a work-in-progress script to upload an excel spreadsheet (.xlsx) of data with one or more worksheets to one or more Omeka collections. The purpose of the script is to allow a tecnically adept person to load data into an Omeka instance 
+This is a work-in-progress script to upload an excel spreadsheet (.xlsx) of data with one or more worksheets to one or more Omeka collections. The purpose of the script is to allow a tecnically adept person to load data into an Omeka instance to create an initial repository. It is unlikely that you would want to maintain a repository using a spreadsheet, the assumption is that this would be used to 'seed' a repository which would then be maintained using the normal web UI.
 
 # Audience
 
