@@ -7,6 +7,20 @@ This is a work-in-progress script to upload an excel spreadsheet (.xlsx) of data
 This document is aimed at technical staff familiar with commandline systems administration and Python programming, and assumes the reader may have to do some experimentation, research and problem solving.
 
 # How-to use this script
+
+## Get the script and Python libraries
+
+Install
+
+    git clone https://github.com/uws-eresearch/omekadd.git
+
+Test for missing Python libraries
+
+   cd omekadd
+   python xlsx2omeka.py
+   sudo easy_install missing libraries until errors cease
+  
+  
 ## Set up an Omeka server
 
 * Install Omeka 2.2
