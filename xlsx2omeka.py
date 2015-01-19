@@ -23,9 +23,9 @@ parser = argparse.ArgumentParser()
 parser.add_argument('inputfile', type=argparse.FileType('rb'),  default=stdin, help='Name of input Excel file')
 parser.add_argument('-k', '--key', default=None, help='Omeka API Key')
 parser.add_argument('-u', '--api_url',default=None, help='Omeka API Endpoint URL (hint, ends in /api)')
-parser.add_argument('-i', '--identifier', action='store_true',default="Identifier", help='Name of an Identifier column in the input spreadsheet. ')
+parser.add_argument('-i', '--identifier', default="Identifier", help='Name of an Identifier column in the input spreadsheet. ')
 parser.add_argument('-d', '--download_cache', default="./data", help='Path to a directory in which to chache dowloads (defaults to ./data)')
-parser.add_argument('-t', '--title', action='store_true',default="Title", help='Name of a Title column in the input spreadsheet. ')
+parser.add_argument('-t', '--title', default="Title", help='Name of a Title column in the input spreadsheet. ')
 parser.add_argument('-p', '--public', action='store_true', help='Make items public')
 parser.add_argument('-f', '--featured', action='store_true', help='Make items featured')
 parser.add_argument('-c', '--create_collections', action='store_true', help='Auto-create missing collections')
@@ -174,6 +174,7 @@ class XlsxMapping:
                         if not collection in self.download_fields:
                             self.download_fields[collection] = {}
                         self.download_fields[collection][column] = True
+ 
 
                     if row['File'] <> None and collection <> None:
                         if not collection in self.file_fields:
@@ -324,16 +325,13 @@ for d in data:
                             stuff_to_upload = True
                     else:
                         if mapping.has_map(collection_name, key):
+                            print collection_name, key
                             if  mapping.collection_field_mapping[collection_name][key] <> None:
                                 element_text = {"html": False, "text": "none"} #, "element_set": {"id": 0}}
                                 element_text["element"] = {"id": mapping.collection_field_mapping[collection_name][key] }
                             else:
                                 element_text = {}
-                            if mapping.to_download(collection_name, key):
-                                URLs.append(value)
-                            if mapping.is_file(collection_name, key):
-                                print data_dir, value
-                                files.append(os.path.join(data_dir,value))
+                            
                             if mapping.is_linked_field(collection_name, key, value):
                                 #TODO - deal with muliple values
                                 to_title =  mapping.id_to_title[value]
@@ -353,9 +351,14 @@ for d in data:
                                     logger.error("failed to add this string \n********\n %s \n*********\n" % value)
 
                             element_texts.append(element_text)
-                    
+               
                 else:
                     item[key] = ""
+
+                if mapping.to_download(collection_name, key):
+                    URLs.append(value)
+                if mapping.is_file(collection_name, key):
+                    files.append(os.path.join(data_dir,value))    
                     
             if not(identifier_column) in item:
                 stuff_to_upload = False
