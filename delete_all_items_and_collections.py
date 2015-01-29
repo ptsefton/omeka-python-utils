@@ -21,5 +21,5 @@ for to_delete in ["items", "collections"]:
     resp, cont = omeka_client.get(to_delete)
     items = json.loads(cont)
     for item in items:
-        print "Deleteing ", to_delete, ": ", item['id']
+        print "Deleting ", to_delete, ": ", item['id']
         omeka_client.delete(to_delete, item['id'])
