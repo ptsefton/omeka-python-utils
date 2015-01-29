@@ -357,9 +357,12 @@ for d in data:
 
                 if mapping.to_download(collection_name, key):
                     URLs.append(value)
-                if mapping.is_file(collection_name, key):
-                    files.append(os.path.join(data_dir,value))    
-                    
+                if mapping.is_file(collection_name, key) and value:
+                    filename = os.path.join(data_dir,value)
+                    if os.path.exists(filename):
+                        files.append(filename)    
+                    else:
+                        logger.warning("skipping non existent file %s" % filename)
             if not(identifier_column) in item:
                 stuff_to_upload = False
                 logger.info("No identifier (%s) in table", identifier_column)
