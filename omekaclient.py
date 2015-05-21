@@ -1,9 +1,27 @@
+"""
+Adapted from https://github.com/wcaleb/omekadd
+
+A basic Python API for Omeka, extended to deal with extra functionalist added by the Ozmeka project
+such as an API for item relations
+
+https://github.com/ozmeka
+
+"""
+
+
 import httplib2
 import urllib
 import mimetypes
 import json
 import os
 import re
+
+import sys  
+
+reload(sys)  
+sys.setdefaultencoding('utf8')
+
+
 from omekautils import create_null_logger
 
 
@@ -70,7 +88,6 @@ class OmekaClient:
                 self.logger.info("Item type %s not found, attempting to make one" % name)
                 response, content = self.post('item_types',  json.dumps({"name": name}))
                 types_data = json.loads(content)
-                print types_data
                 self.types[name] = types_data
                
                 return types_data["id"]
@@ -78,7 +95,7 @@ class OmekaClient:
                 return None
             
     def getVocabularyId(self, name):
-        """Find an the ID of a vocabulary using its prefix (eg dcterms)"""
+        """Find an the ID of an ItemRelations vocabulary using its prefix (eg dcterms)"""
         if not name in self.vocabs:
             response, content = self.get('item_relations_vocabularies', query={"namespace_prefix": name})
             res = json.loads(content)
@@ -140,7 +157,7 @@ class OmekaClient:
         else:
             return None
 
-    def getCollectionId(self, name, create=False):
+    def getCollectionId(self, name, create=False, public=False):
         """Find an Omeka collection by name and cache the results. Does not deal with collections with the same title"""
         def getTitle(collection):
             for t in collection['element_texts']:
@@ -159,7 +176,7 @@ class OmekaClient:
             element_text = {"html": False, "text": name} 
             element_text["element"] = {"id": title_id }
             
-            response, content = self.post('collections', json.dumps({"element_texts": [element_text]}))
+            response, content = self.post('collections', json.dumps({"element_texts": [element_text], "public" : public}))
             collection = json.loads(content)
             getTitle(collection)
             
@@ -172,26 +189,35 @@ class OmekaClient:
     
     def post(self, resource, data, query={}, headers={}):
         return self._request("POST", resource, data=data, query=query, headers=headers)
+
+    def get_file(self, url):
+        resp, content = self._http.request(url, 'GET')
+        return resp, content
+
+    def get_files_for_item(self, id):
+        res, content = self.get("files",query={"item": id})
+        attachments = json.loads(content)
+        return attachments
     
     def post_file_from_filename(self, file, id):
         if os.path.exists(file):
             size = os.path.getsize(file)
             filename = os.path.split(file)[-1]
-
-            res, content = self.get("files",query={"item": id})
-            attachments = json.loads(content)
+            attachments = self.get_files_for_item(id)
             upload_this = True
-            
+            filename = filename.encode("utf-8")
             for attachment in attachments:
                 if attachment["size"] == size and attachment["original_filename"] == filename:
-                    self.logger.warning("********** There is already a %d byte file named %s, not uploading *******", size,filename)
+                    self.logger.info("********** There is already a %d byte file named %s, not uploading *******", size,filename)
                     upload_this = False
             if upload_this:
                 uploadjson = {"item": {"id": id}}
                 uploadmeta = json.dumps(uploadjson)
-                with open(file) as f:
+                
+                with open(file, 'rb' ) as f:
                     content = f.read()
                     f.close()
+             
                 return self.post_file(uploadmeta, filename, content) 
         else:
             self.error("File %s not found", file)
@@ -203,6 +229,7 @@ class OmekaClient:
         return self._request("DELETE", resource, id, query=query)
     
     def post_file(self, data, filename, contents):
+        
         """ data is JSON metadata, filename is a string, contents is file contents """
         BOUNDARY = '----------E19zNvXGzXaLvS5C'
         CRLF = '\r\n'

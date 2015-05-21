@@ -90,9 +90,9 @@ def download_and_upload_files(new_item_id, original_id, URLs, files):
         mapping.add_downloaded_file(url, file_path)
 
     for fyle in files:
-        logger.warning("Uploading %s", fyle)
+        logger.info("Uploading %s", fyle)
         try:
-            print omeka_client.post_file_from_filename(fyle, new_item_id )
+            omeka_client.post_file_from_filename(fyle, new_item_id )
             
             logger.info("Uploaded %s", fyle)
         except:
@@ -233,7 +233,7 @@ class XlsxMapping:
         return collection in mapping.collection_field_mapping and key in mapping.collection_field_mapping[collection]
     
     def is_linked_field(self, collection_name, key, value):
-        return collection_name in self.linked_fields and key in self.linked_fields[collection_name] and self.linked_fields[collection_name][key] == 'yes' and value in self.id_to_omeka_id
+        return collection_name in self.linked_fields and key in self.linked_fields[collection_name] and self.linked_fields[collection_name][key]  and value in self.id_to_omeka_id
 
     def item_relation(self, collection_name, key, value):
         if collection_name in self.related_fields and key in self.related_fields[collection_name] and self.related_fields[collection_name][key] and value in self.id_to_omeka_id:
@@ -276,7 +276,7 @@ for d in data:
     collection_name =  d['title']
     logger.info("Processing potential collection: %s", collection_name)
     iterations = mapping.upload_collection_multiple_times(collection_name)
-    collection_id = omeka_client.getCollectionId(collection_name, create=args['create_collections'])
+    collection_id = omeka_client.getCollectionId(collection_name, create=args['create_collections'], public=args["public"])
     if collection_id <> None:
         #Work out which fields can be automagically mapped
         if not collection_name in mapping.collection_field_mapping:
@@ -325,7 +325,6 @@ for d in data:
                             stuff_to_upload = True
                     else:
                         if mapping.has_map(collection_name, key):
-                            print collection_name, key
                             if  mapping.collection_field_mapping[collection_name][key] <> None:
                                 element_text = {"html": False, "text": "none"} #, "element_set": {"id": 0}}
                                 element_text["element"] = {"id": mapping.collection_field_mapping[collection_name][key] }
