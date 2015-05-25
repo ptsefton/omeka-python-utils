@@ -44,6 +44,9 @@ items = json.loads(cont)
 temp_dir = tempfile.mkdtemp()
 os.chmod(temp_dir, 0o2770) #Sets group permissions and "sticky bit"
 
+num_docs_found = 0
+num_html_uploaded = 0
+num_html_deleted = 0
 for item in items:
     logger.info('Looking at %s', item['id'])
   
@@ -54,7 +57,8 @@ for item in items:
             name, ext = os.path.splitext(fname)
 
             if ext.lower() == ".html":
-                logger.info("Deleting file %s", id)
+                logger.info("Deleting html file: %s",  f['id'])
+                num_html_deleted += 1
                 omeka_client.delete('files', f['id'])
             
     #Second pass do the conversion if required
@@ -64,15 +68,28 @@ for item in items:
             name, ext = os.path.splitext(fname)
 
             if  ext.lower() in [".docx", ".doc", ".odt", ".rtf"]:
+                num_docs_found += 1
                 res, data = omeka_client.get_file(f['file_urls']['original'])
                 download_file = os.path.join(temp_dir, fname)
                 out = open(download_file, 'wb')
                 out.write(data)
                 out.close()
-                logger.info("Converting file %s", id)
+                logger.info("Converting office doc file %s to HTML",  f['id'])
                 out_dir, x = os.path.split(download_file)
                 html_file =  os.path.join(temp_dir, name + ".html")
                 word2html.convert(download_file, html_file , True, True, False)
-                omeka_client.post_file_from_filename(html_file, item['id'])
-            
+                
+                if omeka_client.post_file_from_filename(html_file, item['id']):
+                    num_html_uploaded += 1
+                    logger.info("Uploaded  %s successfully",  f['id'])
+                
         
+logger.info("********************")
+logger.info("SUMMARY:")
+logger.info("Deleted %s HTML", num_html_deleted)
+logger.info("Docs found: %s", num_docs_found)
+logger.info("HTML files converted and added: %s", num_html_uploaded)
+if num_docs_found == num_html_uploaded:
+    logger.info("No errors detected")
+else:
+    logger.error("Number of docs does not match number of HTML files uploaded")

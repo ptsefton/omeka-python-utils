@@ -59,6 +59,13 @@ class OmekaClient:
             self.logger = logger
         
         self.types = {} # Dict of item_types
+
+    def checkResult(self, res):
+        if res['status'] == '201':
+            return True
+        else:
+            logger.error(res)
+            return False 
         
     def addItemRelation(self, subject_id, property_id, object_id):
         """Relate two items (for now has a check to make sure they aren't related in the same way already until that can be baked into the API"""
@@ -196,8 +203,12 @@ class OmekaClient:
 
     def get_files_for_item(self, id):
         res, content = self.get("files",query={"item": id})
-        attachments = json.loads(content)
-        return attachments
+        try:
+            attachments = json.loads(content)
+            return attachments
+        except:
+            self.logger.error("Unable to parse file-list %s", content)
+            return []
     
     def post_file_from_filename(self, file, id):
         if os.path.exists(file):
@@ -218,9 +229,13 @@ class OmekaClient:
                     content = f.read()
                     f.close()
              
-                return self.post_file(uploadmeta, filename, content) 
+                res, content = self.post_file(uploadmeta, filename, content)
+                return self.checkResult(res)
+                
         else:
             self.error("File %s not found", file)
+            return False
+        return True
             
     def put(self, resource, id, data, query={}):
         return self._request("PUT", resource, id, data=data, query=query)
