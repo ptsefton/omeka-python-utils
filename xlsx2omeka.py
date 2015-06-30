@@ -99,6 +99,7 @@ def download_and_upload_files(new_item_id, original_id, URLs, files):
             logger.warning("Some kind of error happened uploading %s - pressing on" % fyle)
 
 def upload(previous_id, original_id, jsonstr, title, URLs, files, iterations):
+    """Upload an item, with metadata in jsonstr"""
     #TODO - get rid of the global mapping variable 
     if iterations > 1:
         previous_id = None
@@ -117,20 +118,19 @@ def upload(previous_id, original_id, jsonstr, title, URLs, files, iterations):
             response, content = omeka_client.post("items", jsonstr)
 
         new_item = json.loads(content)
+        new_item_id = new_item['id']
 
-        try:
-            new_item_id = new_item['id']
-            if iterations == 1:
-                id_mapping.append({'Omeka ID': new_item_id, identifier_column: original_id, "Title": title})
-            
-            logger.info("New ID %s", new_item_id)
-            
-            for (property_id, object_id) in relations:
-                omeka_client.addItemRelation(new_item_id, property_id, object_id)
+        logger.info("New ID %s", new_item_id)
+        if iterations == 1:
+            id_mapping.append({'Omeka ID': new_item_id, identifier_column: original_id, "Title": title})
 
-            download_and_upload_files(new_item_id, original_id, URLs, files)
-        except:
-            logger.error('********* FAILED TO UPLOAD: \n%s\n%s\n%s', item_to_upload, response, content)
+        for (property_id, object_id) in relations:
+                    logger.info("Relating this item %s to another. Property %s, target %s", new_item_id, property_id, object_id)
+                    omeka_client.addItemRelation(new_item_id, property_id, object_id)
+                    
+        download_and_upload_files(new_item_id, original_id, URLs, files)
+       
+        ### logger.error('********* FAILED TO UPLOAD: \n%s\n%s\n%s', item_to_upload, response, content)
 
 
 
@@ -200,8 +200,8 @@ class XlsxMapping:
                         if not collection in self.collection_field_mapping:
                             self.collection_field_mapping[collection] = {}
                        
-                        set_id = o_client.getSetId(element_set)
-                        element_id = o_client.getElementId(set_id,omeka_element)
+                        set_id = o_client.getSetId(element_set, create=args['create_item_types'] )
+                        element_id = o_client.getElementId(set_id ,omeka_element, create=args['create_item_types'] )
     
                         self.collection_field_mapping[collection][column] = element_id
                     #Stop 'None' values appearing in the spreadsheet
@@ -340,7 +340,6 @@ for d in data:
                                 element_text["html"] = True
                                 logger.info("Uploading HTML %s, %s, %s", key, value, element_text["text"])
                             elif property_id <> None:
-                                logger.info("Relating this item to another")
                                 relations.append((property_id, object_id))
                             else:
                                 try: # Have had some encoding problems - not sure if this is still needed
@@ -348,20 +347,25 @@ for d in data:
 
                                 except:
                                     logger.error("failed to add this string \n********\n %s \n*********\n" % value)
-
-                            element_texts.append(element_text)
+                            
                
                 else:
                     item[key] = ""
 
                 if mapping.to_download(collection_name, key):
                     URLs.append(value)
+                    element_text = {}
+                    
                 if mapping.is_file(collection_name, key) and value:
                     filename = os.path.join(data_dir,value)
+                    element_text = {}
                     if os.path.exists(filename):
                         files.append(filename)    
                     else:
                         logger.warning("skipping non existent file %s" % filename)
+                        
+                if element_text != {}:
+                                element_texts.append(element_text)
             if not(identifier_column) in item:
                 stuff_to_upload = False
                 logger.info("No identifier (%s) in table", identifier_column)
@@ -375,8 +379,9 @@ for d in data:
                 title = item[title_column] if title_column in item else "Untitled"
                 if identifier_column in item and original_id in mapping.id_to_omeka_id:
                     previous_id = mapping.id_to_omeka_id[original_id]
-
-                
+                    
+              
+                    
                 upload(previous_id, original_id, jsonstr, title, URLs, files, iterations)
                 
 
