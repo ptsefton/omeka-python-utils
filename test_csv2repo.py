@@ -21,14 +21,20 @@ class TestCSVData(unittest.TestCase):
         self.assertEqual(f.namespace.prefix, "dcterms")
         self.assertEqual(f.field_name, "title")
 
-        data = ['dcterms:title,dcterms:identifier,IS_COLLECTION,URL:1,RELATION:dc:creator']
-        data.append("My title 1,1234,,http://ptsefton.com,12345")
-        data.append("My title 2,1235,,http://ptsefton.com,")
-        data.append("My title 3,1236,,http://ptsefton.com,")
-        data.append("My collection,1237,yes,")
+        data = ['dcterms:type,dcterms:title,dcterms:identifier,URL:1,RELATION:dc:creator']
+        data.append("Text,My title 1,1234,http://ptsefton.com,12345")
+        data.append("Image,My title 2,1235,http://ptsefton.com,")
+        data.append("Text,My title 3,1236,http://ptsefton.com,")
+        data.append("pcdm:Collection,My collection,1237,,")
+        
         c = CSVData(data)
         c.get_items()
+        self.assertEqual(c.collections[0].type, 'pcdm:Collection')
+        self.assertTrue(c.collections[0].is_collection)
         self.assertEqual(len(c.items), 3)
+        #TODO TEST TITLE AND ID
+        self.assertEqual(c.items[2].title, "My title 3")
+        
         self.assertEqual(len(c.collections), 1)
 
 class TestFields(unittest.TestCase):
@@ -50,6 +56,10 @@ class TestFields(unittest.TestCase):
         self.assertEqual(f.namespace.prefix, "dcterms")
         self.assertEqual(f.field_name, "title")
 
+        f = Field("dc:type")
+        self.assertEqual(f.type, Field.ITEM_TYPE)
+        self.assertEqual(f.namespace.prefix, "dcterms")
+        self.assertEqual(f.field_name, "type")
 
         f = Field("REL:dc:title")
         self.assertEqual(f.type, Field.RELATION)
@@ -61,9 +71,7 @@ class TestFields(unittest.TestCase):
         self.assertEqual(f.type, None)
         self.assertEqual(f.namespace.name, None)
         self.assertEqual(f.field_name, None)
-
-        self.assertEqual(Field("IS_COLLECTION").type, Field("IS_SET").type)
-        self.assertEqual(Field("IS_COLLECTION").type, Field.IS_COLLECTION)
+    
         
 if __name__ == '__main__':
     unittest.main()

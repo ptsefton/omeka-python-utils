@@ -47,13 +47,15 @@ class CSVData:
 
         
 class Field:
-    TEXT, FILE, URL, RELATION, IS_COLLECTION, ITEM_TYPE = range(6)
+    TEXT, FILE, URL, RELATION, ITEM_TYPE = range(5)
     def  __init__(self, field_name):
         self.type = None
         self.namespace = Namespace("")
         self.field_name = None
         self.qualified_name = None
         self.value = None
+        self.item_type_field = "dcterms:type" #TODO add a method to change
+        
         if ":" in field_name:
             ns, name = field_name.split(":", 1)
             if ns == "FILE":
@@ -69,17 +71,14 @@ class Field:
                     self.namespace = Namespace(ns)
                     self.qualified_name = ':'.join([self.namespace.prefix, self.field_name])
             else:
-                self.type = self.TEXT
                 self.namespace = Namespace(ns)
                 self.field_name = name
                 self.qualified_name = ':'.join([self.namespace.prefix, self.field_name])
+                if self.qualified_name == self.item_type_field:
+                    self.type = self.ITEM_TYPE
+                else:
+                    self.type = self.TEXT
                 
-        else:
-            if field_name in ["IS_COLLECTION", "IS_SET"]:
-                self.type = Field.IS_COLLECTION
-            if field_name == "ITEM_TYPE":
-                self.type = Field.ITEM_TYPE
-
 
 
 class Item:
@@ -104,19 +103,22 @@ class Item:
                 elif f.type == Field.RELATION:
                     self.relations.append(f)
                 elif f.type == Field.TEXT:
-                    # Some fields are special we want immediate access!
-                    #TODO - maybe make what's special configurable
+                    # Some fields are special, want these to bubble up as
+                    # properties of the Item
+                    #TODO - maybe make what's special configurable but
+                    # these are good defaults
                     if f.qualified_name == "dcterms:title":
-                        self.dc_title = value
+                        self.title = value
                     elif f.qualified_name == "dcterms:identifier":
-                        self.dc_id = value
+                        self.id = value
                     else:
                         self.text_fields.append(f)
-                elif f.type == Field.IS_COLLECTION and value.lower() in ["yes","true","1"]:
-                    self.is_collection = True
                 elif f.type == Field.ITEM_TYPE:
-                    self.item_type = value
-            
+                    self.type = value
+                    if value == "pcdm:Collection":
+                        self.is_collection = True
+                       
+                  
         # etc
 
             

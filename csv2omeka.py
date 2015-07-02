@@ -41,8 +41,8 @@ csv_data = CSVData(inputfile)
 csv_data.get_items()
 
 for collection in csv_data.collections:
-    id = collection.dc_id
-    title = collection.dc_title
+    id = collection.id
+    title = collection.title
     if id != None:
         collection_id = omeka_client.get_collection_id_by_dc_identifier(id, name=title, create=args['create_collections'], public=args["public"])
         print "Collection ID", collection_id
