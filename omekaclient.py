@@ -49,6 +49,7 @@ class OmekaClient:
         self.sets = {} #Keep a dict of element sets keyed by name
         self.elements = {} #Dict of elements keyed by name then set-id
         self.collections = {} #Dict of collections keyed by Title
+        self.collections_by_dc_identifier = {} #Dictt of collections keyed by dc:Identifier
         self.vocabs = {} #Dict of vocabularies keyed by namespace prefix
         self.relation_properties = {} # Dict of Item Relations Properties keyed by vocab id, then name
         self.dublinCoreID = self.getSetId("Dublin Core")
@@ -149,7 +150,7 @@ class OmekaClient:
             response, content = self.get('elements', query={"name": name, "element_set": set_id})
             res = json.loads(content)
             if res <> [] or create:
-                if create and res == []: #TODO deal with t
+                if create and res == []: #TODO deal with 
                     response, content = self.post('elements', json.dumps({"name": name, "element_set" : {"id": set_id}}))
                     self.logger.info("Trying to make an element %s %s", response, content)
                     el_data = json.loads(content)
@@ -189,6 +190,36 @@ class OmekaClient:
             
         
         return self.collections[name]["id"] if name in self.collections else None
+
+    def get_collection_id_by_dc_identifier(self, dcid, name=None, create=False, public=False):
+        """Find an Omeka collection by name and cache the results. Does not deal with collections with the same title"""
+        element_id = self.getElementId(self.dublinCoreID, "Identifier")
+        title_id = self.getElementId(self.dublinCoreID, "Title")  
+        def get_identifier(collection):
+            for t in collection['element_texts']:
+                    if t['element']['id'] == element_id:
+                        self.collections_by_dc_identifier[t['text']] =  collection
+                        
+        if self.collections_by_dc_identifier == {}:
+            response, content = self.get('collections')
+            collections_data = json.loads(content)
+            for collection in collections_data:
+                get_identifier(collection)
+                 
+        if not dcid in self.collections_by_dc_identifier and create:
+            if name == None:
+                name = dcid
+            element_text1 = {"html": False, "text": name} 
+            element_text1["element"] = {"id": title_id }
+
+            element_text2 = {"html": False, "text": dcid} 
+            element_text2["element"] = {"id": element_id}
+            
+            response, content = self.post('collections', json.dumps({"element_texts": [element_text1, element_text2], "public" : public}))
+            collection = json.loads(content)
+            get_identifier(collection)
+        
+        return self.collections_by_dc_identifier[dcid]["id"] if dcid in self.collections_by_dc_identifier else None
     
     def get(self, resource, id=None, query={}):
         return self._request("GET", resource, id=id, query=query)
@@ -209,7 +240,16 @@ class OmekaClient:
         except:
             self.logger.error("Unable to parse file-list %s", content)
             return []
-    
+        
+    def get_item_id_by_dc_identifier(self, id):
+        element_id = self.getElementId(self.dublinCoreID, "Identifier")
+        url = self._endpoint.replace("/api","/items/browse?search=&advanced[0][element_id]=%s&advanced[0][type]=is+exactly&advanced[0][terms]=%s&range=&collection=&type=&user=&tags=&public=&featured=&submit_search=Search+for+items&output=json" % (element_id, id))
+        resp, content = self._http.request(url, "GET")
+        
+        
+#http://192.168.99.100/omeka-2.2.2/items/browse?search=&advanced[0][element_id]=43&advanced[0][type]=is+exactly&advanced[0][terms]=cp6-ds-1&submit_search=Search+for+items&output=json
+
+
     def post_file_from_filename(self, file, id):
         if os.path.exists(file):
             size = os.path.getsize(file)
@@ -270,12 +310,16 @@ class OmekaClient:
         return mimetypes.guess_type(filename)[0] or 'application/octet-stream'
 
     def _request(self, method, resource, id=None, data=None, query=None, headers=None):
-        url = self._endpoint + "/" + resource
+        if resource == "search":
+            url = self._endpoint.replace("api","items/browse")
+        else:
+            url = self._endpoint + "/" + resource
         if id is not None:
             url += "/" + str(id)
         if self._key is not None:
             query["key"] = self._key
         url += "?" + urllib.urlencode(query)
+
         resp, content = self._http.request(url, method, body=data, headers=headers)
         
         links = resp['link'] if 'link' in resp else ""

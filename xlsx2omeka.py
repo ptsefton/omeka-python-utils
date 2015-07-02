@@ -16,7 +16,7 @@ from omekautils import create_stream_logger
 
 """ Uploads an entire spreadsheet to an Omeka server """
 
-logger = create_stream_logger('xlxx2omeka', stdout)
+logger = create_stream_logger('xlxs2omeka', stdout)
 
 # Define and parse command-line arguments
 parser = argparse.ArgumentParser()
