@@ -49,9 +49,11 @@ class OmekaClient:
         self.sets = {} #Keep a dict of element sets keyed by name
         self.elements = {} #Dict of elements keyed by name then set-id
         self.collections = {} #Dict of collections keyed by Title
-        self.collections_by_dc_identifier = {} #Dictt of collections keyed by dc:Identifier
+        self.collections_by_dc_identifier = {} #Dict of collections keyed by dc:Identifier
+        self.item_ids_by_dc_identifier = {} #Dict of item IDs
         self.vocabs = {} #Dict of vocabularies keyed by namespace prefix
-        self.relation_properties = {} # Dict of Item Relations Properties keyed by vocab id, then name
+        self.relation_properties = {} # Dict of Item Relations Properties keyed by vocab id, then Label
+        self.relation_properties_local_part = {} # Dict of Item Relations Properties keyed by vocab id, then local_part
         self.dublinCoreID = self.getSetId("Dublin Core")
         self.omekaMetadataID = self.getSetId("Omeka Metadata")
         if logger is None:
@@ -114,7 +116,7 @@ class OmekaClient:
         return self.vocabs[name]["id"]
 
     def getRelationPropertyId(self, prefix, label):
-        """Find an the ID of a vocabulary using its prefix (eg dcterms)"""
+        """Find a relation property ID using the label (deprecated)"""
         vocab_id = self.getVocabularyId(prefix)
         if vocab_id <> None:
             if not vocab_id in self.relation_properties:
@@ -126,7 +128,23 @@ class OmekaClient:
                     self.relation_properties[vocab_id][label]  = res[0]
                 else:
                     return None
-            return  self.relation_properties[vocab_id][label]["id"]       
+            return  self.relation_properties[vocab_id][label]["id"]
+
+    def getRelationPropertyIdByLocalPart(self, prefix, local_part):
+        """Find a relation property ID using the prefix and local_part"""
+        vocab_id = self.getVocabularyId(prefix)
+        if vocab_id <> None:
+            if not vocab_id in self.relation_properties_local_part:
+                self.relation_properties_local_part[vocab_id] = {}
+            if not local_part in  self.relation_properties_local_part[vocab_id]:
+                response, content = self.get('item_relations_properties', query={"local_part": local_part, "vocabulary_id": vocab_id})
+                res = json.loads(content)
+                if res <> []:
+                    self.relation_properties_local_part[vocab_id][local_part]  = res[0]
+                else:
+                    return None
+                
+            return  self.relation_properties_local_part[vocab_id][local_part]["id"]     
 
     def getSetId(self, name, create=False):
         """Find an Omeka element_set by name and cache the results"""
@@ -220,7 +238,29 @@ class OmekaClient:
             get_identifier(collection)
         
         return self.collections_by_dc_identifier[dcid]["id"] if dcid in self.collections_by_dc_identifier else None
-    
+
+    def get_item_id_by_dc_identifier(self, dcid, name=None, create=False, public=False):
+        """Find an Omeka collection by dublen core ID. This is *HORRIBLE* but Omeka doesn't have a search API (until we fix it) so we
+           have to fetch all the items. This is something you only want to do once per run, so will cache the resuly"""
+        id_element_id = self.getElementId(self.dublinCoreID, "Identifier")
+        
+        def get_identifier(item):
+            for t in item['element_texts']:
+                    if t['element']['id'] == id_element_id:
+                        self.item_ids_by_dc_identifier[t['text']] =  item["id"]
+
+        #Only do this once
+        if self.item_ids_by_dc_identifier == {}:
+            response, content = self.get('items')
+            items_data = json.loads(content)
+            for item in items_data:
+                get_identifier(item)
+                 
+       
+        
+        return self.item_ids_by_dc_identifier[dcid] if dcid in self.item_ids_by_dc_identifier else None
+
+       
     def get(self, resource, id=None, query={}):
         return self._request("GET", resource, id=id, query=query)
         
@@ -241,13 +281,14 @@ class OmekaClient:
             self.logger.error("Unable to parse file-list %s", content)
             return []
         
-    def get_item_id_by_dc_identifier(self, id):
-        element_id = self.getElementId(self.dublinCoreID, "Identifier")
-        url = self._endpoint.replace("/api","/items/browse?search=&advanced[0][element_id]=%s&advanced[0][type]=is+exactly&advanced[0][terms]=%s&range=&collection=&type=&user=&tags=&public=&featured=&submit_search=Search+for+items&output=json" % (element_id, id))
-        resp, content = self._http.request(url, "GET")
-        
-        
-#http://192.168.99.100/omeka-2.2.2/items/browse?search=&advanced[0][element_id]=43&advanced[0][type]=is+exactly&advanced[0][terms]=cp6-ds-1&submit_search=Search+for+items&output=json
+    ## def get_item_id_by_dc_identifier(self, id):
+##         element_id = self.getElementId(self.dublinCoreID, "Identifier")
+##         url = self._endpoint.replace("/api","/items/browse?search=&advanced[0][element_id]=%s&advanced[0][type]=is+exactly&advanced[0][terms]=%s&range=&collection=&type=&user=&tags=&public=&featured=&submit_search=Search+for+items&output=json&key=%s" % (element_id, id, self._key))
+##         resp, content = self._http.request(url, "GET")
+##         print url
+##         print content
+##         #TODO JSON LOAD CONTENT ETC
+## #http://192.168.99.100/omeka-2.2.2/items/browse?search=&advanced[0][element_id]=43&advanced[0][type]=is+exactly&advanced[0][terms]=cp6-ds-1&submit_search=Search+for+items&output=json
 
 
     def post_file_from_filename(self, file, id):

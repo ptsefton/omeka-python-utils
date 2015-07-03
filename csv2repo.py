@@ -25,7 +25,8 @@ class Namespace:
             self.prefix = vocabs[prefix]["prefix"]
             self.name = vocabs[prefix]["name"]
             self.URI = vocabs[prefix]["URI"]
-        
+        else:
+            self.prefix = prefix
 class CSVData:
     def __init__(self, stream):
         self._reader = csv.DictReader(stream)
@@ -47,7 +48,7 @@ class CSVData:
 
         
 class Field:
-    TEXT, FILE, URL, RELATION, ITEM_TYPE = range(5)
+    TEXT, FILE, URL, RELATION, ITEM_TYPE, IN_COLLECTION = range(6)
     def  __init__(self, field_name):
         self.type = None
         self.namespace = Namespace("")
@@ -55,6 +56,7 @@ class Field:
         self.qualified_name = None
         self.value = None
         self.item_type_field = "dcterms:type" #TODO add a method to change
+        self.collection_field = "pcdm:Collection"
         
         if ":" in field_name:
             ns, name = field_name.split(":", 1)
@@ -76,9 +78,10 @@ class Field:
                 self.qualified_name = ':'.join([self.namespace.prefix, self.field_name])
                 if self.qualified_name == self.item_type_field:
                     self.type = self.ITEM_TYPE
+                elif self.qualified_name == self.collection_field:
+                    self.type = self.IN_COLLECTION
                 else:
                     self.type = self.TEXT
-                
 
 
 class Item:
@@ -89,6 +92,7 @@ class Item:
         self.relations = []
         self.text_fields = []
         self.is_collection = False
+        self.in_collection = None
         self.type = None
         self.dc_id = None
         self.dc_title = None
@@ -102,6 +106,8 @@ class Item:
                     self.files(f)           
                 elif f.type == Field.RELATION:
                     self.relations.append(f)
+                elif f.type == Field.IN_COLLECTION: #TODO - allow multiples?
+                    self.in_collection = value # Should be an id
                 elif f.type == Field.TEXT:
                     # Some fields are special, want these to bubble up as
                     # properties of the Item
@@ -111,8 +117,8 @@ class Item:
                         self.title = value
                     elif f.qualified_name == "dcterms:identifier":
                         self.id = value
-                    else:
-                        self.text_fields.append(f)
+                    
+                    self.text_fields.append(f)
                 elif f.type == Field.ITEM_TYPE:
                     self.type = value
                     if value == "pcdm:Collection":

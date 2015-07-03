@@ -10,6 +10,9 @@ class TestNS(unittest.TestCase):
         self.assertEqual(ns.URI, "http://xmlns.com/foaf/0.1/")
         self.assertEqual(Namespace("dc").URI, Namespace("dcterms").URI)
 
+        ns = Namespace("pcdm")
+        self.assertEqual(ns.prefix, "pcdm")
+
    
         
 class TestCSVData(unittest.TestCase):
@@ -21,11 +24,11 @@ class TestCSVData(unittest.TestCase):
         self.assertEqual(f.namespace.prefix, "dcterms")
         self.assertEqual(f.field_name, "title")
 
-        data = ['dcterms:type,dcterms:title,dcterms:identifier,URL:1,RELATION:dc:creator']
-        data.append("Text,My title 1,1234,http://ptsefton.com,12345")
-        data.append("Image,My title 2,1235,http://ptsefton.com,")
-        data.append("Text,My title 3,1236,http://ptsefton.com,")
-        data.append("pcdm:Collection,My collection,1237,,")
+        data = ['dcterms:type,dcterms:title,dcterms:identifier,URL:1,RELATION:dc:creator,pcdm:Collection']
+        data.append("Text,My title 1,1234,http://ptsefton.com,12345,texts")
+        data.append("Image,My title 2,1235,http://ptsefton.com,,images")
+        data.append("Text,My title 3,1236,http://ptsefton.com,,texts")
+        data.append("pcdm:Collection,My collection,1237,,,")
         
         c = CSVData(data)
         c.get_items()
@@ -34,7 +37,7 @@ class TestCSVData(unittest.TestCase):
         self.assertEqual(len(c.items), 3)
         #TODO TEST TITLE AND ID
         self.assertEqual(c.items[2].title, "My title 3")
-        
+        self.assertEqual(c.items[2].in_collection, "texts")
         self.assertEqual(len(c.collections), 1)
 
 class TestFields(unittest.TestCase):
@@ -50,6 +53,10 @@ class TestFields(unittest.TestCase):
         self.assertEqual(f.namespace.URI, None)
         self.assertEqual(f.field_name, "1001 1")
 
+    def test_collection(self):
+        f = Field("pcdm:Collection")
+        self.assertEqual(f.type, Field.IN_COLLECTION)
+        
     def test_relation(self):
         f = Field("RELATION:dc:title")
         self.assertEqual(f.type, Field.RELATION)
