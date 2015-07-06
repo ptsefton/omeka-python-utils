@@ -48,7 +48,8 @@ def download_and_upload_files(item):
        
         
     for f in item.files:
-        files.append(os.path.join(data_dir, str(original_id), item.value))
+        files.append(os.path.join(data_dir, f.value))
+        
     for fyle in files:
         logger.info("Uploading %s", fyle)
         try:
@@ -150,9 +151,13 @@ for item in csv_data.items:
         if previous_id != None:
             logger.info("Re-uploading %s", previous_id)
             response, content = omeka_client.put("items" , previous_id, jsonstr)
+            new_item = json.loads(content)
+            if 'id' not in new_item:
+                print new_item
         else:
             logger.info("Uploading new version")
             response, content = omeka_client.post("items", jsonstr)
+            
         #Looks like the ID wasn't actually there, so get it to mint a new one
         if response['status'] == '404':
             logger.info("retrying")
@@ -160,6 +165,7 @@ for item in csv_data.items:
             
         # Have new (or old) item now
         new_item = json.loads(content)
+
         item.omeka_id = new_item['id']
         uploaded_item_ids.append(item.omeka_id)
         

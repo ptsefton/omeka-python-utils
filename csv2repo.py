@@ -103,7 +103,7 @@ class Item:
                 if f.type == Field.URL:
                     self.URLs.append(f)
                 elif f.type == Field.FILE:
-                    self.files(f)           
+                    self.files.append(f)           
                 elif f.type == Field.RELATION:
                     self.relations.append(f)
                 elif f.type == Field.IN_COLLECTION: #TODO - allow multiples?
